@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Environment variables
+.env
+
+# Flask
+instance/
+.webassets-cache
+
+# Uploads
+uploads/
+*.pdf
+*.docx
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
