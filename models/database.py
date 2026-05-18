@@ -24,6 +24,7 @@ class Patient(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     conversations = relationship('Conversation', back_populates='patient')
+    care_team_members = relationship('CareTeamMember', back_populates='patient')
 
 
 class Conversation(Base):
@@ -63,15 +64,34 @@ class FormResponse(Base):
     form_link_sent_at = Column(DateTime, nullable=True)
     submitted_at = Column(DateTime, nullable=True)
     # Individual health question answers
-    feeling_today = Column(String(255), nullable=True)
-    shortness_of_breath = Column(String(50), nullable=True)
-    dialysis_attended = Column(String(50), nullable=True)
-    medications_taken = Column(String(50), nullable=True)
-    followup_scheduled = Column(String(50), nullable=True)
-    additional_notes = Column(Text, nullable=True)
+    recently_discharged = Column(String(50), nullable=True)
+    medication_changes = Column(String(50), nullable=True)
+    current_symptoms = Column(Text, nullable=True)
+    care_team_notes = Column(Text, nullable=True)
+    contact_request = Column(String(50), nullable=True)
     # Full raw response JSON from Google Forms
     raw_responses = Column(JSON, nullable=True)
+    # AI-generated summary
+    summary = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CareTeamMember(Base):
+    __tablename__ = 'care_team_members'
+    
+    id = Column(Integer, primary_key=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
+    name = Column(String(255), nullable=False)
+    role = Column(String(100), nullable=False)  # e.g., 'Nephrologist', 'Nurse', 'Dietitian'
+    phone_number = Column(String(20), nullable=True)
+    email = Column(String(255), nullable=True)
+    specialty = Column(String(100), nullable=True)
+    is_primary = Column(Boolean, default=False)  # Primary care team member
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    patient = relationship('Patient', back_populates='care_team_members')
 
 
 # Database engine and session setup

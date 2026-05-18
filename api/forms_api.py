@@ -92,6 +92,13 @@ class GoogleFormsWebhook(Resource):
             forms_ns.abort(500, 'Forms service not available.')
 
         payload = request.json or {}
+        
+        # Debug logging
+        print("=" * 70)
+        print("WEBHOOK RECEIVED")
+        print("=" * 70)
+        print(f"Payload: {payload}")
+        print("=" * 70)
 
         if not payload.get('patient_phone'):
             return {'error': 'Missing required field: patient_phone'}, 400
@@ -103,8 +110,12 @@ class GoogleFormsWebhook(Resource):
             result = forms_service.save_form_response(payload)
             return result, 200
         except ValueError as e:
+            print(f"ValueError: {e}")
             return {'error': str(e)}, 400
         except Exception as e:
+            print(f"Exception: {e}")
+            import traceback
+            traceback.print_exc()
             return {'error': f'Error saving form response: {str(e)}'}, 500
 
     def get(self):

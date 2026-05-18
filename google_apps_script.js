@@ -12,16 +12,15 @@
  * Your Google Form must have these exact question titles (case-insensitive):
  *   - "Phone Number"
  *   - "Patient Name"
- *   - "How are you feeling today?"
- *   - "Are you experiencing shortness of breath?"
- *   - "Did you attend your dialysis session?"
- *   - "Are you taking your medications regularly?"
- *   - "Have you scheduled your nephrology follow-up?"
- *   - "Additional Notes" (optional)
+ *   - "Were you recently discharged from the hospital?"
+ *   - "Did the hospital prescribe any new medications or change existing medications?"
+ *   - "Are you currently experiencing any symptoms such as swelling, shortness of breath, pain, dizziness, or weakness?"
+ *   - "Is there anything your nephrologist or care team should know about your recent hospitalization or recovery?"
+ *   - "Would you like someone from your care team to contact you?"
  */
 
 // ✏️ Replace with your public URL (ngrok / localtunnel / production)
-var WEBHOOK_URL = "https://stale-places-speak.loca.lt/api/forms/webhook";
+var WEBHOOK_URL = "https://patient-discharge-gokul.loca.lt/api/forms/webhook";
 
 /**
  * Triggered automatically every time the form is submitted.
@@ -42,12 +41,11 @@ function onFormSubmit(e) {
     var fieldMap = {
       "phone number": "patient_phone",
       "patient name": "patient_name",
-      "how are you feeling today?": "feeling_today",
-      "are you experiencing shortness of breath?": "shortness_of_breath",
-      "did you attend your dialysis session?": "dialysis_attended",
-      "are you taking your medications regularly?": "medications_taken",
-      "have you scheduled your nephrology follow-up?": "followup_scheduled",
-      "additional notes": "additional_notes"
+      "were you recently discharged from the hospital?": "recently_discharged",
+      "did the hospital prescribe any new medications or change existing medications?": "medication_changes",
+      "are you currently experiencing any symptoms such as swelling, shortness of breath, pain, dizziness, or weakness?": "current_symptoms",
+      "is there anything your nephrologist or care team should know about your recent hospitalization or recovery?": "care_team_notes",
+      "would you like someone from your care team to contact you?": "contact_request"
     };
 
     responses.forEach(function(itemResponse) {
@@ -121,12 +119,11 @@ function testWebhook() {
     patient_name: "Test Patient",
     submitted_at: new Date().toISOString(),
     responses: {
-      feeling_today: "Good",
-      shortness_of_breath: "No",
-      dialysis_attended: "Yes",
-      medications_taken: "Yes",
-      followup_scheduled: "Yes",
-      additional_notes: "This is a manual test from Apps Script"
+      recently_discharged: "Yes",
+      medication_changes: "Yes",
+      current_symptoms: "No symptoms",
+      care_team_notes: "Recovering well",
+      contact_request: "No"
     }
   };
 

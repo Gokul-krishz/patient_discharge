@@ -12,6 +12,7 @@ from config import Config
 from models import init_db
 from services import FileExtractor, AIService, SMSService, PatientChatService, ConversationAgent
 from api import forms_ns
+from api.care_team_api import care_team_ns
 
 # Initialize Flask app
 app = Flask(__name__)
