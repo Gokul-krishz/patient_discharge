@@ -30,6 +30,9 @@ class Config:
     # OpenAI settings
     OPENAI_MODEL = 'gpt-4o-mini'
     
+    # Google Forms
+    GOOGLE_FORM_URL = os.getenv('GOOGLE_FORM_URL', '')
+
     # PostgreSQL Database
     DATABASE_URL = os.getenv(
         'DATABASE_URL',

@@ -11,6 +11,7 @@ from werkzeug.datastructures import FileStorage
 from config import Config
 from models import init_db
 from services import FileExtractor, AIService, SMSService, PatientChatService, ConversationAgent
+from api import forms_ns
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -57,6 +58,9 @@ except Exception as e:
 
 # API namespace
 ns = api.namespace('api', description='File processing and AI operations')
+
+# Register forms namespace (separate API layer)
+api.add_namespace(forms_ns, path='/api/forms')
 
 # Request parsers
 upload_parser = api.parser()
@@ -433,9 +437,145 @@ class ListConversations(Resource):
             return {'error': str(e)}, 500
 
 
-@app.route('/webhook/sms', methods=['POST'])
+@ns.route('/patient-replies/<phone_number>')
+class GetPatientReplies(Resource):
+    """Get all SMS replies from a patient"""
+    
+    @api.doc('get_patient_replies')
+    @api.response(200, 'Success')
+    @api.response(404, 'Not Found', error_model)
+    def get(self, phone_number):
+        """Get all inbound SMS replies from a specific patient phone number"""
+        if not conversation_agent:
+            api.abort(500, 'Conversation agent not available.')
+        
+        try:
+            from models.database import Patient, Conversation, Message, SessionLocal
+            
+            db = SessionLocal()
+            try:
+                # Find patient by phone number
+                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+                if not patient:
+                    return {'error': f'No patient found with phone number {phone_number}'}, 404
+                
+                # Get all conversations for this patient
+                conversations = db.query(Conversation).filter_by(patient_id=patient.id).all()
+                
+                if not conversations:
+                    return {
+                        'patient_name': patient.name,
+                        'phone_number': phone_number,
+                        'total_replies': 0,
+                        'replies': []
+                    }, 200
+                
+                # Get all inbound messages across all conversations
+                all_replies = []
+                for conv in conversations:
+                    messages = db.query(Message).filter_by(
+                        conversation_id=conv.id,
+                        direction='inbound'
+                    ).order_by(Message.timestamp).all()
+                    
+                    for msg in messages:
+                        all_replies.append({
+                            'conversation_id': conv.id,
+                            'question_key': msg.question_key,
+                            'reply_text': msg.content,
+                            'timestamp': msg.timestamp.isoformat(),
+                            'conversation_status': conv.status
+                        })
+                
+                return {
+                    'patient_name': patient.name,
+                    'phone_number': phone_number,
+                    'total_replies': len(all_replies),
+                    'replies': all_replies
+                }, 200
+                
+            finally:
+                db.close()
+                
+        except Exception as e:
+            return {'error': f'Error fetching replies: {str(e)}'}, 500
+
+
+@ns.route('/latest-reply/<phone_number>')
+class GetLatestReply(Resource):
+    """Get the most recent SMS reply from a patient"""
+    
+    @api.doc('get_latest_reply')
+    @api.response(200, 'Success')
+    @api.response(404, 'Not Found', error_model)
+    def get(self, phone_number):
+        """Get the most recent inbound SMS reply from a patient"""
+        if not conversation_agent:
+            api.abort(500, 'Conversation agent not available.')
+        
+        try:
+            from models.database import Patient, Conversation, Message, SessionLocal
+            
+            db = SessionLocal()
+            try:
+                # Find patient
+                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+                if not patient:
+                    return {'error': f'No patient found with phone number {phone_number}'}, 404
+                
+                # Get most recent inbound message
+                latest_message = (
+                    db.query(Message)
+                    .join(Conversation)
+                    .filter(Conversation.patient_id == patient.id)
+                    .filter(Message.direction == 'inbound')
+                    .order_by(Message.timestamp.desc())
+                    .first()
+                )
+                
+                if not latest_message:
+                    return {
+                        'patient_name': patient.name,
+                        'phone_number': phone_number,
+                        'message': 'No replies received yet'
+                    }, 200
+                
+                conversation = db.query(Conversation).filter_by(id=latest_message.conversation_id).first()
+                
+                return {
+                    'patient_name': patient.name,
+                    'phone_number': phone_number,
+                    'latest_reply': {
+                        'conversation_id': conversation.id,
+                        'question_key': latest_message.question_key,
+                        'reply_text': latest_message.content,
+                        'timestamp': latest_message.timestamp.isoformat(),
+                        'conversation_status': conversation.status
+                    }
+                }, 200
+                
+            finally:
+                db.close()
+                
+        except Exception as e:
+            return {'error': f'Error fetching latest reply: {str(e)}'}, 500
+
+
+@app.route('/webhook/sms', methods=['GET', 'POST'])
 def sms_webhook():
     """Twilio webhook - receives patient SMS replies and sends next question"""
+    
+    # Handle GET requests (for testing/verification)
+    if request.method == 'GET':
+        return {
+            'status': 'webhook_active',
+            'message': 'Twilio SMS webhook is ready to receive POST requests',
+            'endpoint': '/webhook/sms',
+            'method': 'POST',
+            'tunnel_url': 'https://ninety-trains-grin.loca.lt/webhook/sms'
+        }, 200
+    
+    # Handle POST requests from Twilio
     from twilio.twiml.messaging_response import MessagingResponse
 
     from_number = request.form.get('From')

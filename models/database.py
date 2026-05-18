@@ -54,6 +54,26 @@ class Message(Base):
     conversation = relationship('Conversation', back_populates='messages')
 
 
+class FormResponse(Base):
+    __tablename__ = 'form_responses'
+
+    id = Column(Integer, primary_key=True)
+    patient_phone = Column(String(20), nullable=False)
+    patient_name = Column(String(255), nullable=True)
+    form_link_sent_at = Column(DateTime, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    # Individual health question answers
+    feeling_today = Column(String(255), nullable=True)
+    shortness_of_breath = Column(String(50), nullable=True)
+    dialysis_attended = Column(String(50), nullable=True)
+    medications_taken = Column(String(50), nullable=True)
+    followup_scheduled = Column(String(50), nullable=True)
+    additional_notes = Column(Text, nullable=True)
+    # Full raw response JSON from Google Forms
+    raw_responses = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # Database engine and session setup
 engine = create_engine(Config.DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(bind=engine)
