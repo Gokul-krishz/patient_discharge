@@ -118,27 +118,6 @@ class NotificationService:
                     <p>{summary.get('action_required', 'No action required')}</p>
                 </div>
                 
-                <div class="section">
-                    <div class="section-title">📝 Patient Responses</div>
-                    <div class="responses">
-                        <div class="response-item">
-                            <span class="label">Recently Discharged:</span> {form_responses.get('recently_discharged', 'N/A')}
-                        </div>
-                        <div class="response-item">
-                            <span class="label">Medication Changes:</span> {form_responses.get('medication_changes', 'N/A')}
-                        </div>
-                        <div class="response-item">
-                            <span class="label">Current Symptoms:</span> {form_responses.get('current_symptoms', 'N/A')}
-                        </div>
-                        <div class="response-item">
-                            <span class="label">Care Team Notes:</span> {form_responses.get('care_team_notes', 'N/A')}
-                        </div>
-                        <div class="response-item">
-                            <span class="label">Contact Request:</span> {form_responses.get('contact_request', 'N/A')}
-                        </div>
-                    </div>
-                </div>
-                
                 {self._get_alert_section(form_responses)}
             </div>
         </body>

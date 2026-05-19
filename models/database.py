@@ -20,11 +20,17 @@ class Patient(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
     phone_number = Column(String(20), unique=True, nullable=False)
+    hospital = Column(String(255), nullable=True)
+    admission_date = Column(DateTime, nullable=True)
+    discharge_date = Column(DateTime, nullable=True)
+    status = Column(String(50), nullable=True)  # 'Admitted', 'Discharged'
+    follow_up = Column(String(50), nullable=True)  # 'Pending', 'Link Sent', 'Completed'
     discharge_summary = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     conversations = relationship('Conversation', back_populates='patient')
     care_team_members = relationship('CareTeamMember', back_populates='patient')
+    form_responses = relationship('FormResponse', back_populates='patient')
 
 
 class Conversation(Base):
@@ -59,21 +65,24 @@ class FormResponse(Base):
     __tablename__ = 'form_responses'
 
     id = Column(Integer, primary_key=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=True)
     patient_phone = Column(String(20), nullable=False)
     patient_name = Column(String(255), nullable=True)
     form_link_sent_at = Column(DateTime, nullable=True)
     submitted_at = Column(DateTime, nullable=True)
     # Individual health question answers
-    recently_discharged = Column(String(50), nullable=True)
-    medication_changes = Column(String(50), nullable=True)
+    recently_discharged = Column(Text, nullable=True)
+    medication_changes = Column(Text, nullable=True)
     current_symptoms = Column(Text, nullable=True)
     care_team_notes = Column(Text, nullable=True)
-    contact_request = Column(String(50), nullable=True)
+    contact_request = Column(Text, nullable=True)
     # Full raw response JSON from Google Forms
     raw_responses = Column(JSON, nullable=True)
     # AI-generated summary
     summary = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    patient = relationship('Patient', back_populates='form_responses')
 
 
 class CareTeamMember(Base):

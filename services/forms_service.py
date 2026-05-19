@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from models.database import FormResponse, Patient, SessionLocal, CareTeamMember
 from services.sms_service import SMSService
-from services.openrouter_service import OpenRouterService
+from services.gemini_forms_service import GeminiFormsService
 from services.notification_service import NotificationService
 
 
@@ -16,7 +16,7 @@ class FormsService:
 
     def __init__(self, google_form_url: str = None):
         self.sms_service = SMSService()
-        self.ai_service = OpenRouterService()
+        self.ai_service = GeminiFormsService()
         self.notification_service = NotificationService()
         # Default form URL - can be overridden per request
         self.default_form_url = google_form_url or ""
@@ -116,6 +116,11 @@ class FormsService:
         # Record the form link was sent
         db = self._get_db()
         try:
+            # Update patient follow_up status
+            patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+            if patient:
+                patient.follow_up = 'Link Sent'
+            
             record = FormResponse(
                 patient_phone=phone_number,
                 patient_name=patient_name,
@@ -207,6 +212,12 @@ class FormsService:
                 existing.care_team_notes = responses.get('care_team_notes')
                 existing.contact_request = responses.get('contact_request')
                 existing.raw_responses = responses
+                
+                # Update patient follow_up status to Completed
+                patient = db.query(Patient).filter_by(phone_number=patient_phone).first()
+                if patient:
+                    patient.follow_up = 'Completed'
+                
                 db.commit()
                 db.refresh(existing)
                 record = existing
@@ -224,6 +235,12 @@ class FormsService:
                     raw_responses=responses
                 )
                 db.add(record)
+                
+                # Update patient follow_up status to Completed
+                patient = db.query(Patient).filter_by(phone_number=patient_phone).first()
+                if patient:
+                    patient.follow_up = 'Completed'
+                
                 db.commit()
                 db.refresh(record)
 

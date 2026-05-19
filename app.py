@@ -11,7 +11,7 @@ from werkzeug.datastructures import FileStorage
 from config import Config
 from models import init_db
 from services import FileExtractor, AIService, SMSService, PatientChatService, ConversationAgent
-from api import forms_ns
+from api import forms_ns, patients_ns
 from api.care_team_api import care_team_ns
 
 # Initialize Flask app
@@ -62,6 +62,9 @@ ns = api.namespace('api', description='File processing and AI operations')
 
 # Register forms namespace (separate API layer)
 api.add_namespace(forms_ns, path='/api/forms')
+
+# Register patients namespace
+api.add_namespace(patients_ns, path='/api/patients')
 
 # Request parsers
 upload_parser = api.parser()

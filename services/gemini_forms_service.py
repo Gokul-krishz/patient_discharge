@@ -1,22 +1,23 @@
 """
-OpenRouter AI Service for generating form response summaries
+Google Gemini AI Service for generating form response summaries
 """
 import os
 import json
-import requests
+import google.generativeai as genai
 from typing import Dict, Any
+from config import Config
 
 
-class OpenRouterService:
-    """Service for generating AI summaries using OpenRouter API"""
+class GeminiFormsService:
+    """Service for generating AI summaries using Google Gemini"""
     
     def __init__(self):
-        self.api_key = os.getenv('OPENROUTER_API_KEY')
-        self.base_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.model = "anthropic/claude-3.5-sonnet:beta"  # Correct OpenRouter model name
-        
+        self.api_key = Config.GOOGLE_API_KEY
         if not self.api_key:
-            raise ValueError("OPENROUTER_API_KEY not found in environment variables")
+            raise ValueError("GOOGLE_API_KEY not found in environment variables")
+        
+        genai.configure(api_key=self.api_key)
+        self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
     
     def generate_form_summary(
         self,
@@ -37,76 +38,44 @@ class OpenRouterService:
         """
         try:
             # Build the prompt
-            prompt = self._build_summary_prompt(patient_name, patient_phone, form_responses)
+            prompt = self._build_summary_prompt(patient_name, form_responses)
             
-            # Call OpenRouter API
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
+            # Call Gemini API
+            response = self.model.generate_content(prompt)
+            result_text = response.text
             
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a professional medical documentation assistant. Always return valid JSON only. Never use generic phrases."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "temperature": 0.2,
-                "max_tokens": 800
-            }
+            # Clean and parse JSON
+            result_text = self._clean_json_response(result_text)
+            parsed_result = json.loads(result_text)
             
-            response = requests.post(
-                self.base_url,
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
+            details = parsed_result.get("details", "")
+            action_required = parsed_result.get("action_required", "")
             
-            if response.status_code == 200:
-                result = response.json()
-                result_text = result['choices'][0]['message']['content']
-                result_text = self._clean_json_response(result_text)
-                parsed_result = json.loads(result_text)
-                
-                details = parsed_result.get("details", "")
-                action_required = parsed_result.get("action_required", "")
-                
-                if not details:
-                    details = "The patient has submitted a post-discharge health questionnaire. Please review the raw responses for clinical assessment."
-                if not action_required:
-                    action_required = "The care team should schedule a post-discharge follow-up to assess the patient's recovery status and address any reported symptoms or medication concerns."
-                
-                formatted_response = f"""Details -
+            if not details:
+                details = "The patient has submitted a post-discharge health questionnaire. Please review the raw responses for clinical assessment."
+            if not action_required:
+                action_required = "The care team should schedule a post-discharge follow-up to assess the patient's recovery status and address any reported symptoms or medication concerns."
+            
+            formatted_response = f"""Details -
 
 {details}
 
 Action Required:
 {action_required}"""
-                
-                return {
-                    "details": details,
-                    "action_required": action_required,
-                    "formatted_response": formatted_response
-                }
-            else:
-                error_msg = f"OpenRouter API error: {response.status_code} - {response.text}"
-                print(error_msg)
-                return self._generate_fallback_summary(patient_name, patient_phone, form_responses)
+            
+            return {
+                "details": details,
+                "action_required": action_required,
+                "formatted_response": formatted_response
+            }
                 
         except Exception as e:
-            print(f"Error generating summary with OpenRouter: {str(e)}")
-            return self._generate_fallback_summary(patient_name, patient_phone, form_responses)
+            print(f"Error generating summary with Gemini: {str(e)}")
+            return self._generate_fallback_summary(patient_name, form_responses)
     
     def _build_summary_prompt(
         self,
         patient_name: str,
-        patient_phone: str,
         form_responses: Dict[str, Any]
     ) -> str:
         """Build the prompt for AI summary generation"""
@@ -158,7 +127,6 @@ Return ONLY valid JSON in this exact format:
     def _generate_fallback_summary(
         self,
         patient_name: str,
-        patient_phone: str,
         form_responses: Dict[str, Any]
     ) -> Dict[str, str]:
         """Generate a basic summary if AI service fails"""
