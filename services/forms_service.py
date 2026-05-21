@@ -5,7 +5,7 @@ and stores submitted responses in PostgreSQL.
 """
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from models.database import FormResponse, Patient, SessionLocal, CareTeamMember
+from models.database import FormResponse, Patient, SessionLocal, CareTeamMember, ADTPatient
 from services.sms_service import SMSService
 from services.gemini_forms_service import GeminiFormsService
 from services.notification_service import NotificationService
@@ -94,33 +94,93 @@ class FormsService:
 
     def send_form_link(
         self,
-        phone_number: str,
-        patient_name: str,
-        form_url: str = None
+        phone_number: str = None,
+        patient_name: str = None,
+        form_url: str = None,
+        adt_patient_id: int = None
     ) -> Dict[str, Any]:
         """
         Send Google Form health questionnaire link to patient via SMS.
         Records the send event in the database.
+        
+        If adt_patient_id is provided:
+        1. Fetch ADT patient details
+        2. Update ADT patient status from 'Admitted' to 'Discharged'
+        3. Create/update Patient record with follow_up='Link Sent'
+        4. Send SMS with form link
+        
+        Args:
+            phone_number: Patient phone (required if adt_patient_id not provided)
+            patient_name: Patient name (required if adt_patient_id not provided)
+            form_url: Google Form URL (optional)
+            adt_patient_id: ADT Patient ID (optional)
         """
-        url = form_url or self.default_form_url
-        if not url:
-            raise ValueError("No Google Form URL provided. Pass form_url or set GOOGLE_FORM_URL in .env")
-
-        message = (
-            f"Hello {patient_name}! 👋\n\n"
-            f"{url}\n\n"
-        )
-
-        sms_result = self.sms_service.send_sms(phone_number, message)
-
-        # Record the form link was sent
         db = self._get_db()
         try:
-            # Update patient follow_up status
-            patient = db.query(Patient).filter_by(phone_number=phone_number).first()
-            if patient:
-                patient.follow_up = 'Link Sent'
+            # Handle ADT patient workflow
+            if adt_patient_id:
+                adt_patient = db.query(ADTPatient).filter_by(id=adt_patient_id).first()
+                if not adt_patient:
+                    raise ValueError(f"ADT Patient with ID {adt_patient_id} not found")
+                
+                # Use ADT patient details
+                phone_number = adt_patient.phone_number
+                patient_name = adt_patient.name
+                
+                # Update ADT patient status to 'Discharged'
+                adt_patient.status = 'Discharged'
+                adt_patient.discharge_date = datetime.utcnow()
+                
+                # Create or update Patient record
+                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+                if not patient:
+                    patient = Patient(
+                        name=patient_name,
+                        phone_number=phone_number,
+                        hospital=adt_patient.hospital,
+                        admission_date=adt_patient.admission_date,
+                        discharge_date=adt_patient.discharge_date,
+                        status='Discharged',
+                        follow_up='Link Sent',
+                        discharge_summary=adt_patient.discharge_summary
+                    )
+                    db.add(patient)
+                else:
+                    # Update existing patient
+                    patient.name = patient_name
+                    patient.hospital = adt_patient.hospital
+                    patient.admission_date = adt_patient.admission_date
+                    patient.discharge_date = adt_patient.discharge_date
+                    patient.status = 'Discharged'
+                    patient.follow_up = 'Link Sent'
+                    if adt_patient.discharge_summary:
+                        patient.discharge_summary = adt_patient.discharge_summary
+                
+                db.commit()
             
+            # Validate required fields
+            if not phone_number or not patient_name:
+                raise ValueError("phone_number and patient_name are required")
+            
+            url = form_url or self.default_form_url
+            if not url:
+                raise ValueError("No Google Form URL provided. Pass form_url or set GOOGLE_FORM_URL in .env")
+
+            message = (
+                f"Hello {patient_name}! 👋\n\n"
+                f"{url}\n\n"
+            )
+
+            sms_result = self.sms_service.send_sms(phone_number, message)
+
+            # Update patient follow_up status if not from ADT workflow
+            if not adt_patient_id:
+                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+                if patient:
+                    patient.follow_up = 'Link Sent'
+                    db.commit()
+            
+            # Record the form link was sent
             record = FormResponse(
                 patient_phone=phone_number,
                 patient_name=patient_name,
@@ -138,7 +198,9 @@ class FormsService:
                 'form_url': url,
                 'sms_sent': sms_result.get('success', False),
                 'message_sid': sms_result.get('message_sid'),
-                'sent_at': record.form_link_sent_at.isoformat()
+                'sent_at': record.form_link_sent_at.isoformat(),
+                'adt_patient_id': adt_patient_id,
+                'adt_status_updated': adt_patient_id is not None
             }
         finally:
             db.close()

@@ -22,8 +22,9 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 
 send_form_model = forms_ns.model('SendFormRequest', {
-    'phone_number': fields.String(required=True, description='Patient phone number (E.164 format: +919...)'),
-    'patient_name': fields.String(required=True, description='Patient full name'),
+    'patient_id': fields.Integer(description='ADT Patient ID (if sending from ADT system)'),
+    'phone_number': fields.String(description='Patient phone number (E.164 format: +919...) - required if patient_id not provided'),
+    'patient_name': fields.String(description='Patient full name - required if patient_id not provided'),
     'form_url': fields.String(description='Override Google Form URL (optional if set in .env)')
 })
 
@@ -58,15 +59,22 @@ class SendFormLink(Resource):
             forms_ns.abort(500, 'Forms service not available. Check configuration.')
 
         data = request.json or {}
-        phone_number = data.get('phone_number', '').strip()
-        patient_name = data.get('patient_name', '').strip()
+        patient_id = data.get('patient_id')
+        phone_number = data.get('phone_number', '').strip() if data.get('phone_number') else None
+        patient_name = data.get('patient_name', '').strip() if data.get('patient_name') else None
         form_url = data.get('form_url', '').strip() or None
 
-        if not phone_number or not patient_name:
-            forms_ns.abort(400, 'Missing required fields: phone_number, patient_name')
+        # Validate: either patient_id OR (phone_number AND patient_name) must be provided
+        if not patient_id and (not phone_number or not patient_name):
+            forms_ns.abort(400, 'Either patient_id OR (phone_number AND patient_name) must be provided')
 
         try:
-            result = forms_service.send_form_link(phone_number, patient_name, form_url)
+            result = forms_service.send_form_link(
+                phone_number=phone_number,
+                patient_name=patient_name,
+                form_url=form_url,
+                adt_patient_id=patient_id
+            )
             return result, 200
         except ValueError as e:
             return {'error': str(e)}, 400

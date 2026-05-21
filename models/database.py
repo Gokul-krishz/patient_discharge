@@ -85,6 +85,20 @@ class FormResponse(Base):
     patient = relationship('Patient', back_populates='form_responses')
 
 
+class ADTPatient(Base):
+    __tablename__ = 'adt_patients'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    phone_number = Column(String(20), unique=True, nullable=False)
+    hospital = Column(String(255), nullable=True)
+    admission_date = Column(DateTime, nullable=True)
+    discharge_date = Column(DateTime, nullable=True)
+    status = Column(String(50), nullable=True)  # 'Admitted', 'Discharged'
+    discharge_summary = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class CareTeamMember(Base):
     __tablename__ = 'care_team_members'
     
