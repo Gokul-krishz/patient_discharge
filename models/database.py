@@ -26,6 +26,7 @@ class Patient(Base):
     status = Column(String(50), nullable=True)  # 'Admitted', 'Discharged'
     follow_up = Column(String(50), nullable=True)  # 'Pending', 'Link Sent', 'Completed'
     discharge_summary = Column(JSON, nullable=True)
+    care_team = Column(Integer, nullable=True)  # Care team member ID
     created_at = Column(DateTime, default=datetime.utcnow)
     
     conversations = relationship('Conversation', back_populates='patient')
@@ -96,6 +97,7 @@ class ADTPatient(Base):
     discharge_date = Column(DateTime, nullable=True)
     status = Column(String(50), nullable=True)  # 'Admitted', 'Discharged'
     discharge_summary = Column(JSON, nullable=True)
+    care_team = Column(Integer, nullable=True)  # Care team member ID
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -115,6 +117,14 @@ class CareTeamMember(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     patient = relationship('Patient', back_populates='care_team_members')
+
+
+class Hospital(Base):
+    __tablename__ = 'hospitals'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # Database engine and session setup

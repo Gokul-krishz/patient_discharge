@@ -146,7 +146,10 @@ api.add_namespace(patients_ns, path='/api/patients')
 api.add_namespace(adt_patients_ns, path='/api/adt_patients')
 
 # Register discharge trigger namespace
-api.add_namespace(discharge_ns, path='/api/discharge')
+# api.add_namespace(discharge_ns, path='/api/discharge')
+
+# Register care team namespace
+api.add_namespace(care_team_ns, path='/api/care-team')
 
 # Request parsers
 upload_parser = api.parser()

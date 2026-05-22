@@ -6,6 +6,7 @@ from flask import request
 from flask_restx import Namespace, Resource, fields
 from models.database import ADTPatient, SessionLocal
 from sqlalchemy import desc
+from datetime import datetime
 
 adt_patients_ns = Namespace('adt_patients', description='ADT Patient management operations')
 
@@ -20,7 +21,17 @@ adt_patient_model = adt_patients_ns.model('ADTPatient', {
     'discharge_date': fields.String(description='Discharge date'),
     'status': fields.String(description='Patient status (Admitted/Discharged)'),
     'discharge_summary': fields.Raw(description='Discharge summary JSON'),
+    'care_team': fields.Integer(description='Care team member ID'),
     'created_at': fields.String(description='Record creation timestamp'),
+})
+
+# Request model for creating new ADT patient
+create_adt_patient_model = adt_patients_ns.model('CreateADTPatient', {
+    'patient_name': fields.String(required=True, description='Patient name'),
+    'mobile_number': fields.String(required=True, description='Patient mobile number'),
+    'hospital': fields.String(required=True, description='Hospital name or ID'),
+    'description': fields.String(required=True, description='Patient description/notes'),
+    'care_team': fields.Integer(description='Care team member ID')
 })
 
 adt_patients_list_model = adt_patients_ns.model('ADTPatientsList', {
@@ -34,6 +45,66 @@ adt_patients_list_model = adt_patients_ns.model('ADTPatientsList', {
 
 @adt_patients_ns.route('')
 class ADTPatientsList(Resource):
+    @adt_patients_ns.doc('create_adt_patient')
+    @adt_patients_ns.expect(create_adt_patient_model)
+    @adt_patients_ns.response(201, 'Patient created successfully', adt_patient_model)
+    @adt_patients_ns.response(400, 'Bad Request')
+    @adt_patients_ns.response(500, 'Internal Server Error')
+    def post(self):
+        """Create a new ADT patient record"""
+        try:
+            data = request.json
+            
+            patient_name = data.get('patient_name')
+            mobile_number = data.get('mobile_number')
+            hospital = data.get('hospital')
+            description = data.get('description')
+            care_team = data.get('care_team')
+            
+            if not patient_name or not mobile_number or not hospital or not description:
+                return {'error': 'Missing required fields: patient_name, mobile_number, hospital, description'}, 400
+            
+            db = SessionLocal()
+            try:
+                existing_patient = db.query(ADTPatient).filter_by(phone_number=mobile_number).first()
+                if existing_patient:
+                    return {'error': f'Patient with phone number {mobile_number} already exists'}, 400
+                
+                new_patient = ADTPatient(
+                    name=patient_name,
+                    phone_number=mobile_number,
+                    hospital=hospital,
+                    admission_date=datetime.utcnow(),
+                    status='Admitted',
+                    discharge_summary={'description': description},
+                    care_team=care_team
+                )
+                
+                db.add(new_patient)
+                db.commit()
+                db.refresh(new_patient)
+                
+                return {
+                    'patient_id': f'P{new_patient.id:06d}',
+                    'id': new_patient.id,
+                    'name': new_patient.name,
+                    'phone_number': new_patient.phone_number,
+                    'hospital': new_patient.hospital,
+                    'admission_date': new_patient.admission_date.isoformat(),
+                    'discharge_date': None,
+                    'status': new_patient.status,
+                    'discharge_summary': new_patient.discharge_summary,
+                    'care_team': new_patient.care_team,
+                    'created_at': new_patient.created_at.isoformat(),
+                    'message': 'Patient created successfully'
+                }, 201
+                
+            finally:
+                db.close()
+                
+        except Exception as e:
+            return {'error': f'Error creating ADT patient: {str(e)}'}, 500
+    
     @adt_patients_ns.doc('get_adt_patients')
     @adt_patients_ns.param('page', 'Page number (default: 1)', type=int)
     @adt_patients_ns.param('per_page', 'Items per page (default: 10, max: 100)', type=int)
@@ -94,6 +165,7 @@ class ADTPatientsList(Resource):
                         'discharge_date': patient.discharge_date.isoformat() if patient.discharge_date else None,
                         'status': patient.status or 'Unknown',
                         'discharge_summary': patient.discharge_summary,
+                        'care_team': patient.care_team,
                         'created_at': patient.created_at.isoformat() if patient.created_at else None,
                     })
 
@@ -118,19 +190,20 @@ class ADTHospitalsList(Resource):
     @adt_patients_ns.response(200, 'Success')
     @adt_patients_ns.response(500, 'Internal Server Error')
     def get(self):
-        """Get all unique hospitals from ADT patients"""
+        """Get all hospitals from hospitals table"""
         try:
+            from models.database import Hospital
+            
             db = SessionLocal()
             try:
-                hospitals = (
-                    db.query(ADTPatient.hospital)
-                    .filter(ADTPatient.hospital.isnot(None))
-                    .distinct()
-                    .order_by(ADTPatient.hospital)
-                    .all()
-                )
+                hospitals = db.query(Hospital).order_by(Hospital.name).all()
 
-                hospital_list = [h[0] for h in hospitals if h[0]]
+                hospital_list = []
+                for hospital in hospitals:
+                    hospital_list.append({
+                        'id': hospital.id,
+                        'name': hospital.name
+                    })
 
                 return {
                     'hospitals': hospital_list,
@@ -141,4 +214,4 @@ class ADTHospitalsList(Resource):
                 db.close()
 
         except Exception as e:
-            return {'error': f'Error fetching ADT hospitals: {str(e)}'}, 500
+            return {'error': f'Error fetching hospitals: {str(e)}'}, 500

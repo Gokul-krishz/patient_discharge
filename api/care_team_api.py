@@ -34,6 +34,39 @@ update_care_team_member_model = care_team_ns.model('UpdateCareTeamMember', {
 
 @care_team_ns.route('/members')
 class CareTeamMemberList(Resource):
+    @care_team_ns.doc('get_all_care_team_members')
+    @care_team_ns.response(200, 'Success')
+    @care_team_ns.response(500, 'Internal Server Error')
+    def get(self):
+        """Get all care team members with name, role, phone_number, and email"""
+        try:
+            from models.database import CareTeamMember, SessionLocal
+            
+            db = SessionLocal()
+            try:
+                members = db.query(CareTeamMember).all()
+                
+                members_list = []
+                for member in members:
+                    members_list.append({
+                        'id': member.id,
+                        'name': member.name,
+                        'role': member.role,
+                        'phone_number': member.phone_number,
+                        'email': member.email
+                    })
+                
+                return {
+                    'care_team_members': members_list,
+                    'total': len(members_list)
+                }, 200
+                
+            finally:
+                db.close()
+                
+        except Exception as e:
+            return {'error': f'Error fetching care team members: {str(e)}'}, 500
+    
     @care_team_ns.doc('add_care_team_member')
     @care_team_ns.expect(care_team_member_model)
     def post(self):
