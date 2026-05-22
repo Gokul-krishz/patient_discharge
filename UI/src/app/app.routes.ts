@@ -17,5 +17,9 @@ export const routes: Routes = [
   {
     path: 'follow-ups',
     loadComponent: () => import('./follow-ups/follow-ups.component').then(m => m.FollowUpsComponent)
+  },
+  {
+    path: 'edit-trigger',
+    loadComponent: () => import('./edit-trigger/adtPatient').then(m => m.AdtPatientComponent)
   }
 ];

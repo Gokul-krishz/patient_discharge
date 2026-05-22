@@ -240,6 +240,10 @@ export class DashboardComponent implements OnInit {
     this.router.navigate(['/follow-ups']);
   }
 
+  navigateToEditTrigger(): void {
+    this.router.navigate(['/edit-trigger']);
+  }
+
   getStatusClass(status: string): string {
     return status.toLowerCase().replace(/\s+/g, '-');
   }
