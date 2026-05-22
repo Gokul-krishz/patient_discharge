@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -18,7 +18,7 @@ import {
   templateUrl: './mcp-demo.component.html',
   styleUrl: './mcp-demo.component.scss'
 })
-export class McpDemoComponent implements OnInit {
+export class McpDemoComponent implements OnInit, OnDestroy {
   sidenavOpen = true;
 
   layers: ArchitectureLayer[] = [];
@@ -40,6 +40,17 @@ export class McpDemoComponent implements OnInit {
 
   isLoading = true;
 
+  // Action logs
+  actionLogs: any[] = [];
+  loadingLogs = false;
+  private logsRefreshInterval: any;
+
+  // Patient search and filter
+  patients: any[] = [];
+  loadingPatients = false;
+  selectedPatientId: string = '';
+  filteredLogs: any[] = [];
+
   constructor(
     private mcpService: McpService,
     private cdr: ChangeDetectorRef,
@@ -50,6 +61,19 @@ export class McpDemoComponent implements OnInit {
     this.loadArchitecture();
     this.loadStatus();
     this.loadTools();
+    this.loadActionLogs();
+    this.loadPatients();
+    
+    // Auto-refresh logs every 10 seconds
+    this.logsRefreshInterval = setInterval(() => {
+      this.loadActionLogs();
+    }, 10000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.logsRefreshInterval) {
+      clearInterval(this.logsRefreshInterval);
+    }
   }
 
   loadArchitecture(): void {
@@ -178,5 +202,102 @@ export class McpDemoComponent implements OnInit {
 
   logout(): void {
     this.router.navigate(['/login']);
+  }
+
+  // Action Logs Methods
+  loadActionLogs(): void {
+    this.loadingLogs = true;
+    this.mcpService.getActionLogs(30).subscribe({
+      next: (res: any) => {
+        this.actionLogs = res.logs || [];
+        this.filterLogsByPatient(); // Apply current filter
+        this.loadingLogs = false;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        console.error('Error loading action logs:', err);
+        this.loadingLogs = false;
+        this.actionLogs = [];
+        this.filteredLogs = [];
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  formatLogTime(timestamp: string): string {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (seconds < 60) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  getActionType(action: string): string {
+    const actionMap: Record<string, string> = {
+      'SMS Sent': 'sms',
+      'Form Link Sent': 'form',
+      'Form Submitted': 'form',
+      'Conversation Started': 'conversation',
+      'Conversation Completed': 'conversation',
+      'AI Summary Generated': 'ai',
+      'Patient Created': 'patient',
+      'Patient Updated': 'patient',
+      'Care Team Assigned': 'team',
+      'Follow-up Scheduled': 'schedule',
+      'Notification Sent': 'notification'
+    };
+    return actionMap[action] || 'default';
+  }
+
+  hasMetadata(metadata: any): boolean {
+    return metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0;
+  }
+
+  formatJSON(obj: any): string {
+    try {
+      return JSON.stringify(obj, null, 2);
+    } catch (e) {
+      return String(obj);
+    }
+  }
+
+  // Patient search and filter methods
+  loadPatients(): void {
+    this.loadingPatients = true;
+    this.mcpService.getPatients().subscribe({
+      next: (res: any) => {
+        this.patients = res.patients || [];
+        this.loadingPatients = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Error loading patients:', err);
+        this.loadingPatients = false;
+        this.patients = [];
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  filterLogsByPatient(): void {
+    if (!this.selectedPatientId || this.selectedPatientId === '') {
+      // Show all logs
+      this.filteredLogs = [...this.actionLogs];
+    } else {
+      // Filter by selected patient ID
+      const patientId = parseInt(this.selectedPatientId);
+      this.filteredLogs = this.actionLogs.filter(log => log.patient_id === patientId);
+    }
+    this.cdr.detectChanges();
   }
 }

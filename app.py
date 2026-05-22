@@ -330,6 +330,15 @@ class SendSMS(Resource):
             api.abort(400, 'Missing required fields: phone_number, patient_name, message_type')
         
         try:
+            from services import ActionLogger, ACTION_TYPES
+            from models.database import Patient, SessionLocal
+            
+            # Get patient_id from phone number
+            db = SessionLocal()
+            patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+            patient_id = patient.id if patient else None
+            db.close()
+            
             if message_type == 'discharge_summary':
                 result = sms_service.send_discharge_summary_notification(
                     phone_number, 
@@ -345,6 +354,19 @@ class SendSMS(Resource):
                 )
             else:
                 api.abort(400, 'Invalid message_type. Use: discharge_summary or follow_up')
+            
+            # Log the action
+            if patient_id and result.get('status') == 'sent':
+                ActionLogger.log_action(
+                    patient_id=patient_id,
+                    action=ACTION_TYPES['SMS_SENT'],
+                    metadata={
+                        'phone': phone_number,
+                        'message_type': message_type,
+                        'details': details,
+                        'twilio_sid': result.get('message_sid')
+                    }
+                )
             
             return result, 200
             
@@ -428,6 +450,9 @@ class PatientChatSMS(Resource):
             api.abort(400, 'Missing required fields')
         
         try:
+            from services import ActionLogger, ACTION_TYPES
+            from models.database import Patient, SessionLocal
+            
             # Get AI response
             is_emergency = chat_service.detect_emergency(question)
             
@@ -442,6 +467,24 @@ class PatientChatSMS(Resource):
             
             # Send via SMS
             sms_result = sms_service.send_sms(phone_number, response)
+            
+            # Log the action
+            if sms_result.get('success'):
+                db = SessionLocal()
+                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+                if patient:
+                    ActionLogger.log_action(
+                        patient_id=patient.id,
+                        action=ACTION_TYPES['SMS_SENT'],
+                        metadata={
+                            'phone': phone_number,
+                            'message_type': 'ai_chat_response',
+                            'question': question[:100],  # First 100 chars
+                            'is_emergency': is_emergency,
+                            'twilio_sid': sms_result.get('message_sid')
+                        }
+                    )
+                db.close()
             
             return {
                 'question': question,
@@ -481,9 +524,29 @@ class StartConversation(Resource):
             api.abort(400, 'Missing required fields: phone_number, patient_name')
 
         try:
+            from services import ActionLogger, ACTION_TYPES
+            from models.database import Patient, SessionLocal
+            
             result = conversation_agent.start_conversation(
                 phone_number, patient_name, discharge_summary
             )
+            
+            # Log the action
+            if result.get('status') == 'started':
+                db = SessionLocal()
+                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+                if patient:
+                    ActionLogger.log_action(
+                        patient_id=patient.id,
+                        action=ACTION_TYPES['CONVERSATION_STARTED'],
+                        metadata={
+                            'phone': phone_number,
+                            'conversation_id': result.get('conversation_id'),
+                            'questions_total': result.get('total_questions', 0)
+                        }
+                    )
+                db.close()
+            
             return result, 200
         except Exception as e:
             return {'error': f'Error starting conversation: {str(e)}'}, 500
@@ -804,6 +867,60 @@ class MCPDemoTrace(Resource):
             'trace': trace_steps,
             'summary': f'Workflow "{workflow}" traced through 6 architecture layers successfully (dry-run mode)'
         }, 200
+
+
+@ns.route('/action-logs')
+class ActionLogs(Resource):
+    """Get patient action logs"""
+
+    @api.doc('get_action_logs')
+    @api.response(200, 'Success')
+    def get(self):
+        """Get recent action logs across all patients"""
+        from services import ActionLogger
+        
+        try:
+            limit = request.args.get('limit', 100, type=int)
+            patient_id = request.args.get('patient_id', type=int)
+            action = request.args.get('action', type=str)
+            
+            if patient_id:
+                logs = ActionLogger.get_patient_logs(patient_id, limit)
+            elif action:
+                logs = ActionLogger.get_logs_by_action(action, limit)
+            else:
+                logs = ActionLogger.get_recent_logs(limit)
+            
+            return {
+                'logs': logs,
+                'total': len(logs)
+            }, 200
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+@ns.route('/action-logs/<int:patient_id>')
+class PatientActionLogs(Resource):
+    """Get action logs for a specific patient"""
+
+    @api.doc('get_patient_action_logs')
+    @api.response(200, 'Success')
+    @api.response(404, 'Patient not found')
+    def get(self, patient_id):
+        """Get all action logs for a specific patient"""
+        from services import ActionLogger
+        
+        try:
+            limit = request.args.get('limit', 50, type=int)
+            logs = ActionLogger.get_patient_logs(patient_id, limit)
+            
+            return {
+                'patient_id': patient_id,
+                'logs': logs,
+                'total': len(logs)
+            }, 200
+        except Exception as e:
+            return {'error': str(e)}, 500
 
 
 @ns.route('/conversation/<int:conversation_id>')

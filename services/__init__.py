@@ -3,5 +3,6 @@ from .ai_service import AIService
 from .sms_service import SMSService
 from .patient_chat_service import PatientChatService
 from .conversation_agent import ConversationAgent
+from .action_logger import ActionLogger, ACTION_TYPES
 
-__all__ = ['FileExtractor', 'AIService', 'SMSService', 'PatientChatService', 'ConversationAgent']
+__all__ = ['FileExtractor', 'AIService', 'SMSService', 'PatientChatService', 'ConversationAgent', 'ActionLogger', 'ACTION_TYPES']

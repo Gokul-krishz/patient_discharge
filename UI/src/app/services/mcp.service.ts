@@ -71,6 +71,21 @@ export interface ExecutionHistoryResponse {
   total: number;
 }
 
+export interface ActionLog {
+  id: number;
+  patient_id: number;
+  patient_name: string;
+  phone_number: string;
+  action: string;
+  metadata: Record<string, any>;
+  timestamp: string;
+}
+
+export interface ActionLogsResponse {
+  logs: ActionLog[];
+  total: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -103,5 +118,23 @@ export class McpService {
       patient_name: patientName,
       phone_number: phoneNumber
     });
+  }
+
+  getActionLogs(limit: number = 50, patientId?: number, action?: string): Observable<ActionLogsResponse> {
+    let params: any = { limit: limit.toString() };
+    if (patientId) params.patient_id = patientId.toString();
+    if (action) params.action = action;
+    
+    return this.http.get<ActionLogsResponse>(`${this.BASE_URL}/action-logs`, { params });
+  }
+
+  getPatientActionLogs(patientId: number, limit: number = 50): Observable<ActionLogsResponse> {
+    return this.http.get<ActionLogsResponse>(`${this.BASE_URL}/action-logs/${patientId}`, {
+      params: { limit: limit.toString() }
+    });
+  }
+
+  getPatients(): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/patients/list`);
   }
 }

@@ -270,6 +270,23 @@ class SendFormLink(Resource):
                         adt_patient_id=numeric_id
                     )
                     
+                    # Log the action (find the created Patient record)
+                    if result.get('success') and result.get('sms_sent'):
+                        from services import ActionLogger, ACTION_TYPES
+                        patient = db.query(Patient).filter_by(phone_number=adt_patient.phone_number).first()
+                        if patient:
+                            ActionLogger.log_action(
+                                patient_id=patient.id,
+                                action=ACTION_TYPES['FORM_LINK_SENT'],
+                                metadata={
+                                    'phone': adt_patient.phone_number,
+                                    'source': 'adt_patients',
+                                    'adt_patient_id': numeric_id,
+                                    'form_url': result.get('form_url'),
+                                    'twilio_sid': result.get('message_sid')
+                                }
+                            )
+                    
                     return {
                         'success': True,
                         'message': f'Form link sent to {adt_patient.name}',
@@ -292,6 +309,20 @@ class SendFormLink(Resource):
                         phone_number=patient.phone_number,
                         patient_name=patient.name
                     )
+                    
+                    # Log the action
+                    if result.get('success') and result.get('sms_sent'):
+                        from services import ActionLogger, ACTION_TYPES
+                        ActionLogger.log_action(
+                            patient_id=patient.id,
+                            action=ACTION_TYPES['FORM_LINK_SENT'],
+                            metadata={
+                                'phone': patient.phone_number,
+                                'source': 'patients',
+                                'form_url': result.get('form_url'),
+                                'twilio_sid': result.get('message_sid')
+                            }
+                        )
                     
                     return {
                         'success': True,

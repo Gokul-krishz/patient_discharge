@@ -69,12 +69,34 @@ class SendFormLink(Resource):
             forms_ns.abort(400, 'Either patient_id OR (phone_number AND patient_name) must be provided')
 
         try:
+            from services import ActionLogger, ACTION_TYPES
+            from models.database import Patient, SessionLocal
+            
             result = forms_service.send_form_link(
                 phone_number=phone_number,
                 patient_name=patient_name,
                 form_url=form_url,
                 adt_patient_id=patient_id
             )
+            
+            # Log the action
+            if result.get('success') and result.get('sms_sent'):
+                db = SessionLocal()
+                # Try to find patient by phone number
+                if phone_number:
+                    patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+                    if patient:
+                        ActionLogger.log_action(
+                            patient_id=patient.id,
+                            action=ACTION_TYPES['FORM_LINK_SENT'],
+                            metadata={
+                                'phone': phone_number,
+                                'form_url': result.get('form_url'),
+                                'twilio_sid': result.get('message_sid')
+                            }
+                        )
+                db.close()
+            
             return result, 200
         except ValueError as e:
             return {'error': str(e)}, 400
@@ -115,7 +137,90 @@ class GoogleFormsWebhook(Resource):
             return {'error': 'Missing required field: responses'}, 400
 
         try:
+            from services import ActionLogger, ACTION_TYPES
+            from models.database import Patient, SessionLocal
+            
             result = forms_service.save_form_response(payload)
+            
+            # Log the actions
+            if result.get('success'):
+                db = SessionLocal()
+                phone_number = payload.get('patient_phone')
+                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
+                
+                if patient:
+                    # Log form submission with actual responses
+                    responses = payload.get('responses', {})
+                    ActionLogger.log_action(
+                        patient_id=patient.id,
+                        action=ACTION_TYPES['FORM_SUBMITTED'],
+                        metadata={
+                            'phone': phone_number,
+                            'form_response_id': result.get('record_id'),
+                            'responses_count': len(responses),
+                            'responses': responses  # Include actual responses
+                        }
+                    )
+                    
+                    # Log AI summary generation with actual summary text
+                    if result.get('summary_generated'):
+                        summary = result.get('summary', {})
+                        summary_text = summary.get('formatted_response', '')
+                        ActionLogger.log_action(
+                            patient_id=patient.id,
+                            action=ACTION_TYPES['AI_SUMMARY_GENERATED'],
+                            metadata={
+                                'phone': phone_number,
+                                'form_response_id': result.get('record_id'),
+                                'summary_length': len(summary_text),
+                                'summary': summary_text,  # Include actual summary
+                                'details': summary.get('details', ''),
+                                'action_required': summary.get('action_required', '')
+                            }
+                        )
+                    
+                    # Log care team notifications with member details
+                    if result.get('notifications'):
+                        notifications = result.get('notifications', {})
+                        emails_sent_count = notifications.get('emails_sent', 0)
+                        sms_sent_count = notifications.get('sms_sent', 0)
+                        errors = notifications.get('errors', [])
+                        
+                        # Get care team member details
+                        from models.database import CareTeamMember
+                        care_team = db.query(CareTeamMember).filter_by(patient_id=patient.id).all()
+                        care_team_details = [{
+                            'name': m.name,
+                            'role': m.role,
+                            'email': m.email,
+                            'phone': m.phone_number
+                        } for m in care_team]
+                        
+                        # Determine status
+                        if emails_sent_count > 0 or sms_sent_count > 0:
+                            status = 'success'
+                        elif errors:
+                            status = 'failed'
+                        else:
+                            status = 'no_care_team'
+                        
+                        # Always log (success or failure) with care team details
+                        ActionLogger.log_action(
+                            patient_id=patient.id,
+                            action=ACTION_TYPES['NOTIFICATION_SENT'],
+                            metadata={
+                                'phone': phone_number,
+                                'type': 'care_team_notification',
+                                'status': status,
+                                'emails_sent': emails_sent_count,
+                                'sms_sent': sms_sent_count,
+                                'care_team_members': care_team_details,  # Include care team details
+                                'errors': errors if errors else None
+                            }
+                        )
+                
+                db.close()
+            
             return result, 200
         except ValueError as e:
             print(f"ValueError: {e}")
