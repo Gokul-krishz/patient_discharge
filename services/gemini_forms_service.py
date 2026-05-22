@@ -40,9 +40,14 @@ class GeminiFormsService:
             # Build the prompt
             prompt = self._build_summary_prompt(patient_name, form_responses)
             
-            # Call Gemini API
-            response = self.model.generate_content(prompt)
+            # Call Gemini API with timeout
+            print(f"[Gemini AI] Generating summary for {patient_name}...")
+            response = self.model.generate_content(
+                prompt,
+                request_options={"timeout": 30}  # 30 second timeout
+            )
             result_text = response.text
+            print(f"[Gemini AI] Summary generated successfully")
             
             # Clean and parse JSON
             result_text = self._clean_json_response(result_text)

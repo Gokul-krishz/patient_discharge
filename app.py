@@ -7,14 +7,26 @@ import sys
 import logging
 from flask import Flask, request
 from flask_restx import Api, Resource, fields
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
 
 from config import Config
 from models import init_db
 from services import FileExtractor, AIService, SMSService, PatientChatService, ConversationAgent
-from api import forms_ns, patients_ns, adt_patients_ns
+from api import forms_ns, patients_ns, adt_patients_ns, discharge_ns
 from api.care_team_api import care_team_ns
+
+# MCP Architecture imports
+try:
+    from mcp.server import MCPServer
+    from mcp.registry import ToolRegistry
+    from agent.outreach_agent import OutreachAgent
+except ImportError:
+    MCPServer = None
+    ToolRegistry = None
+    OutreachAgent = None
+    print("Warning: MCP modules not found. MCP features will be disabled.")
 
 # Configure logging to show all output immediately
 logging.basicConfig(
@@ -32,6 +44,15 @@ sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = Config.UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = Config.MAX_CONTENT_LENGTH
+
+# Enable CORS for all routes with all methods
+CORS(app, 
+     resources={r"/*": {
+         "origins": "*",
+         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         "allow_headers": ["Content-Type", "Authorization"]
+     }},
+     supports_credentials=False)
 
 # Create upload folder
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -57,6 +78,7 @@ file_extractor = FileExtractor()
 ai_service = None
 sms_service = None
 chat_service = None
+forms_service = None
 
 try:
     ai_service = AIService()
@@ -71,6 +93,46 @@ except Exception as e:
     print(f"Warning: SMS/Chat Service initialization failed: {str(e)}")
     print("SMS features will be disabled. Check Twilio configuration in .env")
 
+try:
+    from services.forms_service import FormsService
+    forms_service = FormsService(google_form_url=Config.GOOGLE_FORM_URL)
+except Exception as e:
+    print(f"Warning: Forms Service initialization failed: {str(e)}")
+    print("Forms features will be disabled.")
+
+# Initialize MCP Architecture
+mcp_server = None
+outreach_agent = None
+
+if MCPServer and ToolRegistry and OutreachAgent:
+    print("\n" + "="*70)
+    print("Initializing MCP Architecture")
+    print("="*70)
+    try:
+        # Create MCP Server
+        mcp_server = MCPServer()
+        
+        # Register tools with existing service instances
+        ToolRegistry.create_and_register_tools(
+            mcp_server,
+            sms_service=sms_service,
+            ai_service=ai_service,
+            conversation_agent=conversation_agent,
+            forms_service=forms_service
+        )
+        
+        # Create Outreach Agent
+        outreach_agent = OutreachAgent(mcp_server)
+        
+        print("="*70)
+        print("MCP Architecture initialized successfully")
+        print("="*70 + "\n")
+    except Exception as e:
+        print(f"Warning: MCP Architecture initialization failed: {str(e)}")
+        print("MCP features will be disabled. Falling back to direct service calls.")
+else:
+    print("MCP modules not available. Skipping MCP initialization.")
+
 # API namespace
 ns = api.namespace('api', description='File processing and AI operations')
 
@@ -82,6 +144,9 @@ api.add_namespace(patients_ns, path='/api/patients')
 
 # Register ADT patients namespace
 api.add_namespace(adt_patients_ns, path='/api/adt_patients')
+
+# Register discharge trigger namespace
+api.add_namespace(discharge_ns, path='/api/discharge')
 
 # Request parsers
 upload_parser = api.parser()
@@ -421,6 +486,323 @@ class StartConversation(Resource):
             return {'error': f'Error starting conversation: {str(e)}'}, 500
 
 
+@ns.route('/mcp/outreach')
+class MCPOutreach(Resource):
+    """MCP-powered patient outreach endpoint (NEW ARCHITECTURE)"""
+
+    @api.doc('mcp_outreach')
+    @api.expect(api.model('MCPOutreachRequest', {
+        'phone_number': fields.String(required=True, description='Patient phone number'),
+        'patient_name': fields.String(required=True, description='Patient full name'),
+        'outreach_type': fields.String(required=True, description='Type: conversation, notification, reminder, or form'),
+        'discharge_summary': fields.Raw(description='Optional discharge summary context'),
+        'custom_message': fields.String(description='Optional custom message for notifications/reminders'),
+        'form_url': fields.String(description='Optional Google Form URL (uses default if not provided)')
+    }))
+    @api.response(200, 'Outreach completed')
+    @api.response(400, 'Bad Request', error_model)
+    @api.response(500, 'Internal Server Error', error_model)
+    def post(self):
+        """
+        Start patient outreach using MCP architecture.
+        Routes through: API → AI Agent → MCP Server → Tools → Services
+        
+        Outreach Types:
+        - conversation: Start structured SMS Q&A conversation
+        - notification: Send one-time notification SMS
+        - reminder: Send appointment reminder SMS
+        - form: Send Google Form link for post-discharge questionnaire
+        """
+        if not outreach_agent:
+            api.abort(500, 'MCP Outreach Agent not available. Check MCP initialization.')
+
+        data = request.json
+        phone_number = data.get('phone_number')
+        patient_name = data.get('patient_name')
+        outreach_type = data.get('outreach_type', 'form')
+        discharge_summary = data.get('discharge_summary')
+        custom_message = data.get('custom_message')
+        form_url = data.get('form_url')
+
+        if not phone_number or not patient_name:
+            api.abort(400, 'Missing required fields: phone_number, patient_name')
+
+        try:
+            # Route through AI Agent → MCP Server → Tools
+            result = outreach_agent.start_patient_outreach(
+                phone_number=phone_number,
+                patient_name=patient_name,
+                outreach_type=outreach_type,
+                discharge_summary=discharge_summary,
+                custom_message=custom_message,
+                form_url=form_url
+            )
+            return result, 200
+        except Exception as e:
+            return {'error': f'Error in MCP outreach: {str(e)}'}, 500
+
+
+@ns.route('/mcp/tools')
+class MCPTools(Resource):
+    """List available MCP tools"""
+
+    @api.doc('list_mcp_tools')
+    @api.response(200, 'Success')
+    def get(self):
+        """Get list of all registered MCP tools"""
+        if not outreach_agent:
+            api.abort(500, 'MCP Outreach Agent not available.')
+        
+        try:
+            result = outreach_agent.get_available_tools()
+            return result, 200
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+@ns.route('/mcp/status')
+class MCPStatus(Resource):
+    """Get MCP architecture status"""
+
+    @api.doc('mcp_status')
+    @api.response(200, 'Success')
+    def get(self):
+        """Get MCP server and agent status"""
+        if not outreach_agent:
+            return {
+                'mcp_enabled': False,
+                'message': 'MCP architecture not initialized'
+            }, 200
+        
+        try:
+            result = outreach_agent.get_agent_status()
+            result['mcp_enabled'] = True
+            return result, 200
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+@ns.route('/mcp/execution-history')
+class MCPExecutionHistory(Resource):
+    """Get MCP tool execution history for demo dashboard"""
+
+    @api.doc('mcp_execution_history')
+    @api.response(200, 'Success')
+    def get(self):
+        """Get recent tool execution history"""
+        if not mcp_server:
+            return {'executions': [], 'total': 0}, 200
+        try:
+            limit = request.args.get('limit', 20, type=int)
+            history = mcp_server.get_execution_history(limit=limit)
+            return {'executions': history, 'total': len(history)}, 200
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+@ns.route('/mcp/architecture')
+class MCPArchitecture(Resource):
+    """Get MCP architecture overview for demo dashboard"""
+
+    @api.doc('mcp_architecture')
+    @api.response(200, 'Success')
+    def get(self):
+        """Get full architecture description for visualization"""
+        tools_info = []
+        if mcp_server:
+            for tool_schema in mcp_server.list_tools():
+                tools_info.append({
+                    'name': tool_schema['name'],
+                    'description': tool_schema['description'],
+                    'parameters': tool_schema['parameters']
+                })
+
+        return {
+            'layers': [
+                {
+                    'id': 'ui',
+                    'name': 'Angular Dashboard',
+                    'type': 'frontend',
+                    'description': 'Patient management UI with real-time updates',
+                    'tech': 'Angular 21'
+                },
+                {
+                    'id': 'api',
+                    'name': 'REST API',
+                    'type': 'api',
+                    'description': 'Flask-RESTX endpoints with Swagger docs',
+                    'tech': 'Flask + Flask-RESTX'
+                },
+                {
+                    'id': 'agent',
+                    'name': 'AI Outreach Agent',
+                    'type': 'agent',
+                    'description': 'Orchestrates patient workflows, selects tools, manages context',
+                    'tech': 'Python AI Agent'
+                },
+                {
+                    'id': 'mcp',
+                    'name': 'MCP Server',
+                    'type': 'mcp',
+                    'description': 'Tool registry, validation, execution, and history tracking',
+                    'tech': 'Model Context Protocol'
+                },
+                {
+                    'id': 'tools',
+                    'name': 'MCP Tools',
+                    'type': 'tools',
+                    'description': 'Pluggable tools: SMS, AI Summary, Forms, Conversations',
+                    'tech': 'MCPTool Interface',
+                    'items': tools_info
+                },
+                {
+                    'id': 'services',
+                    'name': 'Backend Services',
+                    'type': 'services',
+                    'description': 'Twilio SMS, Google Gemini AI, Google Forms, PostgreSQL',
+                    'tech': 'External Integrations'
+                }
+            ],
+            'workflows': [
+                {
+                    'id': 'form_outreach',
+                    'name': 'Form Outreach',
+                    'description': 'Send post-discharge questionnaire form link via SMS',
+                    'flow': ['ui', 'api', 'agent', 'mcp', 'tools', 'services']
+                },
+                {
+                    'id': 'conversation',
+                    'name': 'Patient Conversation',
+                    'description': 'Start structured check-in Q&A via SMS',
+                    'flow': ['ui', 'api', 'agent', 'mcp', 'tools', 'services']
+                },
+                {
+                    'id': 'notification',
+                    'name': 'SMS Notification',
+                    'description': 'Send one-time notification to patient',
+                    'flow': ['ui', 'api', 'agent', 'mcp', 'tools', 'services']
+                },
+                {
+                    'id': 'ai_summary',
+                    'name': 'AI Summary Generation',
+                    'description': 'Generate AI-powered discharge summary',
+                    'flow': ['ui', 'api', 'agent', 'mcp', 'tools', 'services']
+                }
+            ]
+        }, 200
+
+
+@ns.route('/mcp/demo-trace')
+class MCPDemoTrace(Resource):
+    """Simulate MCP workflow trace for demo (dry-run, no actual SMS sent)"""
+
+    @api.doc('mcp_demo_trace')
+    @api.expect(api.model('DemoTraceRequest', {
+        'workflow': fields.String(required=True, description='Workflow to trace: form_outreach, conversation, notification, ai_summary'),
+        'patient_name': fields.String(description='Demo patient name', default='Demo Patient'),
+        'phone_number': fields.String(description='Demo phone number', default='+1234567890')
+    }))
+    @api.response(200, 'Success')
+    def post(self):
+        """Simulate a workflow trace showing each layer step-by-step (no real actions)"""
+        import time
+
+        data = request.json or {}
+        workflow = data.get('workflow', 'form_outreach')
+        patient_name = data.get('patient_name', 'Demo Patient')
+        phone_number = data.get('phone_number', '+1234567890')
+
+        trace_steps = []
+
+        # Step 1: UI Layer
+        trace_steps.append({
+            'step': 1,
+            'layer': 'Angular Dashboard',
+            'layer_id': 'ui',
+            'action': 'User clicks outreach button',
+            'detail': f'Initiating {workflow} for {patient_name}',
+            'status': 'completed',
+            'data_sent': {'patient_name': patient_name, 'phone_number': phone_number, 'outreach_type': workflow}
+        })
+
+        # Step 2: API Layer
+        trace_steps.append({
+            'step': 2,
+            'layer': 'REST API',
+            'layer_id': 'api',
+            'action': 'POST /api/mcp/outreach',
+            'detail': 'Request validated, routed to AI Agent',
+            'status': 'completed',
+            'data_sent': {'endpoint': '/api/mcp/outreach', 'method': 'POST'}
+        })
+
+        # Step 3: Agent Layer
+        tool_selected = {
+            'form_outreach': 'send_form_link',
+            'conversation': 'start_conversation',
+            'notification': 'send_sms',
+            'ai_summary': 'generate_summary'
+        }.get(workflow, 'send_form_link')
+
+        trace_steps.append({
+            'step': 3,
+            'layer': 'AI Outreach Agent',
+            'layer_id': 'agent',
+            'action': f'Agent selects tool: {tool_selected}',
+            'detail': f'Workflow: {workflow} — Agent analyzes context, picks optimal tool',
+            'status': 'completed',
+            'data_sent': {'tool_selected': tool_selected, 'workflow': workflow}
+        })
+
+        # Step 4: MCP Server
+        trace_steps.append({
+            'step': 4,
+            'layer': 'MCP Server',
+            'layer_id': 'mcp',
+            'action': f'execute_tool("{tool_selected}")',
+            'detail': 'Parameter validation passed, tool found in registry, executing...',
+            'status': 'completed',
+            'data_sent': {'tool_name': tool_selected, 'params_validated': True, 'registry_lookup': 'success'}
+        })
+
+        # Step 5: MCP Tool
+        trace_steps.append({
+            'step': 5,
+            'layer': f'MCP Tool: {tool_selected}',
+            'layer_id': 'tools',
+            'action': f'{tool_selected}.execute()',
+            'detail': f'Tool executes business logic for {patient_name}',
+            'status': 'completed',
+            'data_sent': {'phone_number': phone_number, 'patient_name': patient_name}
+        })
+
+        # Step 6: Service Layer
+        service_name = {
+            'form_outreach': 'FormsService + Twilio SMS',
+            'conversation': 'ConversationAgent + Twilio SMS',
+            'notification': 'SMSService + Twilio',
+            'ai_summary': 'AIService + Google Gemini'
+        }.get(workflow, 'Service Layer')
+
+        trace_steps.append({
+            'step': 6,
+            'layer': f'Service: {service_name}',
+            'layer_id': 'services',
+            'action': f'External API call (DRY RUN)',
+            'detail': f'In production: sends to {phone_number} via {service_name}',
+            'status': 'simulated',
+            'data_sent': {'service': service_name, 'dry_run': True}
+        })
+
+        return {
+            'workflow': workflow,
+            'patient_name': patient_name,
+            'total_steps': len(trace_steps),
+            'trace': trace_steps,
+            'summary': f'Workflow "{workflow}" traced through 6 architecture layers successfully (dry-run mode)'
+        }, 200
+
+
 @ns.route('/conversation/<int:conversation_id>')
 class GetConversation(Resource):
     """Get conversation details and responses"""
@@ -624,15 +1006,22 @@ class Health(Resource):
     @api.doc('health_check')
     def get(self):
         """Check API health status"""
-        return {
+        health_status = {
             'status': 'healthy',
             'message': 'API is running',
             'ai_provider': Config.AI_PROVIDER,
             'ai_service_available': ai_service is not None,
             'sms_service_available': sms_service is not None,
             'chat_service_available': chat_service is not None,
-            'conversation_agent_available': conversation_agent is not None
-        }, 200
+            'conversation_agent_available': conversation_agent is not None,
+            'mcp_architecture': {
+                'enabled': mcp_server is not None and outreach_agent is not None,
+                'mcp_server_available': mcp_server is not None,
+                'outreach_agent_available': outreach_agent is not None,
+                'registered_tools': len(mcp_server.list_tools()) if mcp_server else 0
+            }
+        }
+        return health_status, 200
 
 # Entry point
 if __name__ == '__main__':

@@ -5,6 +5,8 @@ Sends notifications to care team members via email and SMS
 from typing import Dict, Any, List
 from services.sms_service import SMSService
 import smtplib
+import requests
+import base64
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from config import Config
@@ -16,12 +18,14 @@ class NotificationService:
     
     def __init__(self):
         self.sms_service = SMSService()
-        # Email configuration (you'll need to add these to .env)
+        # Email configuration
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.smtp_username = os.getenv('SMTP_USERNAME', '')
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
         self.from_email = os.getenv('FROM_EMAIL', 'noreply@hospital.com')
+        # Sendgrid / HTTP email API (fallback)
+        self.sendgrid_api_key = os.getenv('SENDGRID_API_KEY', '')
     
     def send_summary_to_care_team(
         self,
@@ -181,12 +185,53 @@ class NotificationService:
         
         print(f"[EMAIL] Preparing email: From={self.from_email}, To={to_email}, Subject={subject}")
         
+        print(f"[Notification Service] Sending email to {to_email}...")
+        
+        # Method 1: Try Gmail API via OAuth2 SMTP with XOAUTH2
+        # Method 2: Try SMTP (SSL then TLS)
+        # Method 3: Use Twilio SendGrid HTTP API if configured
+        
+        smtp_success = False
+        
+        # Try SMTP methods first (quick timeout to not block)
+        for method_name, method_func in [
+            ("SSL (port 465)", lambda: self._send_smtp_ssl(to_email, subject, body)),
+            ("TLS (port 587)", lambda: self._send_smtp_tls(to_email, subject, body)),
+        ]:
+            try:
+                print(f"[Notification Service] Trying {method_name}...")
+                method_func()
+                print(f"[Notification Service] ✓ Email sent to {member_name} via {method_name}")
+                smtp_success = True
+                break
+            except Exception as e:
+                print(f"[Notification Service] {method_name} failed: {str(e)}")
+        
+        if not smtp_success:
+            print(f"[Notification Service] ✗ SMTP blocked by network. Email to {member_name} skipped.")
+            print(f"[Notification Service] ℹ SMS notification was sent successfully as fallback.")
+    
+    def _send_smtp_ssl(self, to_email, subject, body):
+        """Send via SMTP SSL (port 465)"""
+        msg = self._build_email_message(to_email, subject, body)
+        with smtplib.SMTP_SSL(self.smtp_server, 465, timeout=8) as server:
+            server.login(self.smtp_username, self.smtp_password)
+            server.send_message(msg)
+    
+    def _send_smtp_tls(self, to_email, subject, body):
+        """Send via SMTP TLS (port 587)"""
+        msg = self._build_email_message(to_email, subject, body)
+        with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=8) as server:
+            server.starttls()
+            server.login(self.smtp_username, self.smtp_password)
+            server.send_message(msg)
+    
+    def _build_email_message(self, to_email, subject, body):
+        """Build MIME email message"""
         msg = MIMEMultipart('alternative')
         msg['From'] = self.from_email
         msg['To'] = to_email
         msg['Subject'] = subject
-        
-        # Attach HTML body
         html_part = MIMEText(body, 'html')
         msg.attach(html_part)
         

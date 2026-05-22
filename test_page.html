@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Flow Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .response.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .response.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .response pre {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        
+        .info-box strong {
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 MCP Flow Tester</h1>
+            <p>Test Patient Outreach & Care Team Notifications</p>
+        </div>
+        
+        <div class="content">
+            <!-- Step 1: Setup Care Team -->
+            <div class="section">
+                <h2>📋 Step 1: Setup Care Team Member</h2>
+                <div class="info-box">
+                    <strong>Note:</strong> Add care team members who will receive notifications when patient submits the form.
+                </div>
+                
+                <div class="form-group">
+                    <label>Patient Phone Number</label>
+                    <input type="tel" id="careTeamPatientPhone" value="+917477858611" placeholder="+917477858611">
+                </div>
+                
+                <div class="form-group">
+                    <label>Care Team Member Name</label>
+                    <input type="text" id="careTeamName" value="Dr. Gokul Kumar" placeholder="Dr. Gokul Kumar">
+                </div>
+                
+                <div class="form-group">
+                    <label>Role</label>
+                    <input type="text" id="careTeamRole" value="Primary Physician" placeholder="Primary Physician">
+                </div>
+                
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="careTeamEmail" value="gokul.kumar@kanini.com" placeholder="email@example.com">
+                </div>
+                
+                <div class="form-group">
+                    <label>Phone Number</label>
+                    <input type="tel" id="careTeamPhone" value="+919715441374" placeholder="+919715441374">
+                </div>
+                
+                <button onclick="setupCareTeam()">Add Care Team Member</button>
+                
+                <div id="careTeamResponse" class="response"></div>
+                <div id="careTeamLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Adding care team member...</p>
+                </div>
+            </div>
+            
+            <!-- Step 2: Send Form Link -->
+            <div class="section">
+                <h2>📱 Step 2: Send Google Form Link</h2>
+                <div class="info-box">
+                    <strong>Note:</strong> This will send a Google Form link via SMS to the patient.
+                </div>
+                
+                <div class="form-group">
+                    <label>Patient Phone Number</label>
+                    <input type="tel" id="patientPhone" value="+917477858611" placeholder="+917477858611">
+                </div>
+                
+                <div class="form-group">
+                    <label>Patient Name</label>
+                    <input type="text" id="patientName" value="Test Patient" placeholder="Test Patient">
+                </div>
+                
+                <div class="form-group">
+                    <label>Outreach Type</label>
+                    <select id="outreachType">
+                        <option value="form">Google Form (Recommended)</option>
+                        <option value="conversation">SMS Conversation</option>
+                        <option value="notification">Notification</option>
+                        <option value="reminder">Reminder</option>
+                    </select>
+                </div>
+                
+                <button onclick="sendFormLink()">Send Form Link</button>
+                
+                <div id="formResponse" class="response"></div>
+                <div id="formLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Sending form link...</p>
+                </div>
+            </div>
+            
+            <!-- Step 3: Check Status -->
+            <div class="section">
+                <h2>🔍 Step 3: Check MCP Status</h2>
+                <button onclick="checkStatus()">Check MCP Status</button>
+                
+                <div id="statusResponse" class="response"></div>
+                <div id="statusLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Checking status...</p>
+                </div>
+            </div>
+            
+            <!-- Instructions -->
+            <div class="section">
+                <h2>📖 Testing Instructions</h2>
+                <ol style="line-height: 2;">
+                    <li><strong>Add Care Team Member:</strong> Fill in care team details and click "Add Care Team Member"</li>
+                    <li><strong>Send Form Link:</strong> Click "Send Form Link" to send SMS to patient</li>
+                    <li><strong>Check Phone:</strong> Patient receives SMS with Google Form link</li>
+                    <li><strong>Fill Form:</strong> Click link, fill out form, and submit</li>
+                    <li><strong>Verify Notifications:</strong> Care team receives email and SMS with AI summary</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:8080';
+        
+        async function setupCareTeam() {
+            const responseDiv = document.getElementById('careTeamResponse');
+            const loadingDiv = document.getElementById('careTeamLoading');
+            
+            responseDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            
+            const patientPhone = document.getElementById('careTeamPatientPhone').value;
+            const name = document.getElementById('careTeamName').value;
+            const role = document.getElementById('careTeamRole').value;
+            const email = document.getElementById('careTeamEmail').value;
+            const phone = document.getElementById('careTeamPhone').value;
+            
+            try {
+                // First, get or create patient
+                const patientResponse = await fetch(`${API_BASE}/api/patients`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: 'Test Patient',
+                        phone_number: patientPhone
+                    })
+                });
+                
+                const patientData = await patientResponse.json();
+                const patientId = patientData.patient_id || patientData.id;
+                
+                // Add care team member
+                const response = await fetch(`${API_BASE}/api/patients/${patientId}/care-team`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        role: role,
+                        email: email,
+                        phone_number: phone,
+                        is_primary: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                loadingDiv.style.display = 'none';
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response success';
+                responseDiv.innerHTML = `
+                    <strong>✅ Success!</strong>
+                    <p>Care team member added successfully!</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.innerHTML = `
+                    <strong>❌ Error!</strong>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        async function sendFormLink() {
+            const responseDiv = document.getElementById('formResponse');
+            const loadingDiv = document.getElementById('formLoading');
+            
+            responseDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            
+            const phone = document.getElementById('patientPhone').value;
+            const name = document.getElementById('patientName').value;
+            const type = document.getElementById('outreachType').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/mcp/outreach`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone_number: phone,
+                        patient_name: name,
+                        outreach_type: type
+                    })
+                });
+                
+                const data = await response.json();
+                
+                loadingDiv.style.display = 'none';
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response success';
+                responseDiv.innerHTML = `
+                    <strong>✅ Success!</strong>
+                    <p>Form link sent via SMS!</p>
+                    <p><strong>Check your phone for the message.</strong></p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.innerHTML = `
+                    <strong>❌ Error!</strong>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        async function checkStatus() {
+            const responseDiv = document.getElementById('statusResponse');
+            const loadingDiv = document.getElementById('statusLoading');
+            
+            responseDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/mcp/status`);
+                const data = await response.json();
+                
+                loadingDiv.style.display = 'none';
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response success';
+                responseDiv.innerHTML = `
+                    <strong>✅ MCP Status</strong>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.innerHTML = `
+                    <strong>❌ Error!</strong>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

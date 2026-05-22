@@ -44,6 +44,13 @@ class Config:
     TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
     TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
     
+    # Email settings (for care team notifications)
+    SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+    SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
+    SMTP_USERNAME = os.getenv('SMTP_USERNAME')
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+    FROM_EMAIL = os.getenv('FROM_EMAIL', os.getenv('SMTP_USERNAME'))
+    
     @staticmethod
     def validate():
         """Validate configuration"""
