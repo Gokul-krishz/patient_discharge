@@ -237,41 +237,75 @@ class SendFormLink(Resource):
     @patients_ns.response(404, 'Patient not found')
     @patients_ns.response(500, 'Internal Server Error')
     def post(self):
-        """Send form link to a patient"""
+        """Send form link to a patient (checks ADT patients table)"""
         try:
             from services.forms_service import FormsService
             from config import Config
+            from models.database import ADTPatient
             
             data = request.json
-            patient_id_str = data.get('patient_id', '')
+            patient_id_str = data.get('patient_id', '').strip()
             
-            # Extract numeric ID
+            if not patient_id_str:
+                return {'error': 'patient_id is required'}, 400
+            
+            # Extract numeric ID from formatted patient_id (e.g., P000010 -> 10)
             try:
-                numeric_id = int(patient_id_str.replace('P', ''))
+                if patient_id_str.upper().startswith('P'):
+                    numeric_id = int(patient_id_str[1:])  # Remove 'P' and convert to int (handles leading zeros)
+                else:
+                    numeric_id = int(patient_id_str)  # Handle plain numeric input
             except ValueError:
-                return {'error': 'Invalid patient ID format'}, 400
+                return {'error': f'Invalid patient ID format: {patient_id_str}. Expected format: P000001 or numeric ID'}, 400
             
             db = SessionLocal()
             try:
+                # First check ADT patients table
+                adt_patient = db.query(ADTPatient).filter(ADTPatient.id == numeric_id).first()
+                
+                if adt_patient:
+                    # Use ADT workflow: updates ADT patient status, creates Patient record, sends SMS
+                    forms_service = FormsService(google_form_url=Config.GOOGLE_FORM_URL)
+                    result = forms_service.send_form_link(
+                        adt_patient_id=numeric_id
+                    )
+                    
+                    return {
+                        'success': True,
+                        'message': f'Form link sent to {adt_patient.name}',
+                        'patient_id': f'P{numeric_id:06d}',
+                        'patient_name': adt_patient.name,
+                        'phone_number': adt_patient.phone_number,
+                        'source': 'adt_patients',
+                        'adt_status_updated': True,
+                        'sms_sent': result.get('sms_sent', False),
+                        'message_sid': result.get('message_sid')
+                    }, 200
+                
+                # If not found in ADT patients, check regular patients table
                 patient = db.query(Patient).filter(Patient.id == numeric_id).first()
                 
-                if not patient:
-                    return {'error': 'Patient not found'}, 404
+                if patient:
+                    # Use regular workflow for existing patients
+                    forms_service = FormsService(google_form_url=Config.GOOGLE_FORM_URL)
+                    result = forms_service.send_form_link(
+                        phone_number=patient.phone_number,
+                        patient_name=patient.name
+                    )
+                    
+                    return {
+                        'success': True,
+                        'message': f'Form link sent to {patient.name}',
+                        'patient_id': f'P{numeric_id:06d}',
+                        'patient_name': patient.name,
+                        'phone_number': patient.phone_number,
+                        'source': 'patients',
+                        'sms_sent': result.get('sms_sent', False),
+                        'message_sid': result.get('message_sid')
+                    }, 200
                 
-                # Initialize forms service and send link
-                forms_service = FormsService(google_form_url=Config.GOOGLE_FORM_URL)
-                result = forms_service.send_form_link(
-                    phone_number=patient.phone_number,
-                    patient_name=patient.name
-                )
-                
-                return {
-                    'success': True,
-                    'message': f'Form link sent to {patient.name}',
-                    'patient_id': patient_id_str,
-                    'patient_name': patient.name,
-                    'phone_number': patient.phone_number
-                }, 200
+                # Not found in either table
+                return {'error': f'Patient not found with ID: {patient_id_str} (numeric: {numeric_id})'}, 404
                 
             finally:
                 db.close()

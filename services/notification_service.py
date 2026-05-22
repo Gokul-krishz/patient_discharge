@@ -53,29 +53,50 @@ class NotificationService:
         sms_body = self._format_sms_body(patient_name, summary)
         
         for member in care_team_members:
+            member_name = member.get('name', 'Unknown')
+            print(f"[NOTIFY] Processing member: {member_name} | email={member.get('email')} | phone={member.get('phone_number')}")
+            import sys
+            sys.stdout.flush()
+            
             # Send email
             if member.get('email'):
-                try:
-                    self._send_email(
-                        to_email=member['email'],
-                        subject=f"Patient Update: {patient_name} - Post-Discharge Form Response",
-                        body=email_body,
-                        member_name=member['name']
-                    )
-                    results['emails_sent'] += 1
-                except Exception as e:
-                    results['errors'].append(f"Email to {member['name']}: {str(e)}")
+                if not self.smtp_username or not self.smtp_password:
+                    msg = f"Email to {member_name} skipped: SMTP_USERNAME/SMTP_PASSWORD not configured in .env"
+                    results['errors'].append(msg)
+                    print(f"[NOTIFY] WARNING: {msg}")
+                else:
+                    try:
+                        self._send_email(
+                            to_email=member['email'],
+                            subject=f"Patient Update: {patient_name} - Post-Discharge Form Response",
+                            body=email_body,
+                            member_name=member_name
+                        )
+                        results['emails_sent'] += 1
+                        print(f"[NOTIFY] Email sent to {member_name} ({member['email']})")
+                    except Exception as e:
+                        msg = f"Email to {member_name}: {str(e)}"
+                        results['errors'].append(msg)
+                        print(f"[NOTIFY] ERROR: {msg}")
             
             # Send SMS to ALL care team members
             if member.get('phone_number'):
+                # Normalize phone number to E.164 format
+                phone = member['phone_number'].strip()
+                if not phone.startswith('+'):
+                    phone = '+' + phone
+                    print(f"[NOTIFY] Normalized care team phone: {member['phone_number']} -> {phone}")
                 try:
                     self.sms_service.send_sms(
-                        to_number=member['phone_number'],
+                        to_number=phone,
                         message=sms_body
                     )
                     results['sms_sent'] += 1
+                    print(f"[NOTIFY] SMS sent to {member_name} ({phone})")
                 except Exception as e:
-                    results['errors'].append(f"SMS to {member['name']}: {str(e)}")
+                    msg = f"SMS to {member_name}: {str(e)}"
+                    results['errors'].append(msg)
+                    print(f"[NOTIFY] ERROR: {msg}")
         
         return results
     
@@ -157,9 +178,8 @@ class NotificationService:
         member_name: str
     ):
         """Send email using SMTP"""
-        if not self.smtp_username or not self.smtp_password:
-            print(f"Warning: Email not configured. Skipping email to {member_name}")
-            return
+        
+        print(f"[EMAIL] Preparing email: From={self.from_email}, To={to_email}, Subject={subject}")
         
         msg = MIMEMultipart('alternative')
         msg['From'] = self.from_email
@@ -171,7 +191,11 @@ class NotificationService:
         msg.attach(html_part)
         
         # Send email
+        print(f"[EMAIL] Connecting to SMTP server: {self.smtp_server}:{self.smtp_port}")
         with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
             server.starttls()
+            print(f"[EMAIL] Logging in as: {self.smtp_username}")
             server.login(self.smtp_username, self.smtp_password)
-            server.send_message(msg)
+            print(f"[EMAIL] Sending message...")
+            result = server.send_message(msg)
+            print(f"[EMAIL] Email sent successfully! SMTP response: {result}")

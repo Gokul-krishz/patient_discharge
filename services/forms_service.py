@@ -23,48 +23,157 @@ class FormsService:
 
     def _get_db(self):
         return SessionLocal()
-    
-    def _generate_and_notify_care_team(
+
+    def _resolve_phone(self, phone: str) -> str:
+        """
+        Normalize a phone number to E.164 format.
+        Handles: '9715441374' -> '+919715441374' is NOT done here (country code unknown).
+        This simply ensures a leading '+' is present when the raw value already
+        includes the country code digits (e.g. '919715441374' -> '+919715441374').
+        Use _find_existing_form_response for fuzzy lookup.
+        """
+        phone = phone.strip()
+        if phone and not phone.startswith('+'):
+            return '+' + phone
+        return phone
+
+    def _find_existing_form_response(self, db, patient_phone: str):
+        """
+        Find the most recent pending FormResponse for a patient tolerating phone
+        format differences (E.164 vs local number without country code).
+
+        Lookup order:
+        1. Exact match on patient_phone as-is
+        2. Exact match with leading '+' added
+        3. Suffix match on last 10 digits (handles local number vs stored E.164)
+        """
+        from datetime import timedelta
+
+        def _pending_query(db, phone_val):
+            return (
+                db.query(FormResponse)
+                .filter(FormResponse.patient_phone == phone_val)
+                .filter(FormResponse.submitted_at == None)
+                .order_by(FormResponse.created_at.desc())
+                .first()
+            )
+
+        def _recent_query(db, phone_val):
+            cutoff = datetime.utcnow() - timedelta(hours=24)
+            return (
+                db.query(FormResponse)
+                .filter(FormResponse.patient_phone == phone_val)
+                .filter(FormResponse.created_at >= cutoff)
+                .order_by(FormResponse.created_at.desc())
+                .first()
+            )
+
+        # 1. Exact match
+        record = _pending_query(db, patient_phone) or _recent_query(db, patient_phone)
+        if record:
+            return record
+
+        # 2. Try with '+' prefix
+        if not patient_phone.startswith('+'):
+            with_plus = '+' + patient_phone
+            record = _pending_query(db, with_plus) or _recent_query(db, with_plus)
+            if record:
+                return record
+
+        # 3. Suffix match on last 10 digits (local number submitted, E.164 stored)
+        digits_only = ''.join(filter(str.isdigit, patient_phone))
+        if len(digits_only) >= 10:
+            last10 = digits_only[-10:]
+            print(f"[FORMS] Phone lookup: trying suffix match on last 10 digits: {last10}")
+            record = (
+                db.query(FormResponse)
+                .filter(FormResponse.patient_phone.like(f'%{last10}'))
+                .filter(FormResponse.submitted_at == None)
+                .order_by(FormResponse.created_at.desc())
+                .first()
+            )
+            if not record:
+                cutoff = datetime.utcnow() - timedelta(hours=24)
+                record = (
+                    db.query(FormResponse)
+                    .filter(FormResponse.patient_phone.like(f'%{last10}'))
+                    .filter(FormResponse.created_at >= cutoff)
+                    .order_by(FormResponse.created_at.desc())
+                    .first()
+                )
+            if record:
+                print(f"[FORMS] Matched via suffix: payload={patient_phone} -> stored={record.patient_phone}")
+                return record
+
+        return None
+
+    def _find_patient_by_phone(self, db, patient_phone: str):
+        """
+        Find a Patient record tolerating phone format differences.
+        Tries exact, +prefix, and last-10-digit suffix match.
+        """
+        patient = db.query(Patient).filter_by(phone_number=patient_phone).first()
+        if patient:
+            return patient
+
+        if not patient_phone.startswith('+'):
+            patient = db.query(Patient).filter_by(phone_number='+' + patient_phone).first()
+            if patient:
+                return patient
+
+        digits_only = ''.join(filter(str.isdigit, patient_phone))
+        if len(digits_only) >= 10:
+            last10 = digits_only[-10:]
+            patient = (
+                db.query(Patient)
+                .filter(Patient.phone_number.like(f'%{last10}'))
+                .first()
+            )
+        return patient
+
+    def _notify_care_team(
         self,
         db,
         patient_name: str,
         patient_phone: str,
+        ai_summary: Dict[str, Any],
         responses: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Generate AI summary and notify care team members
-        
+        Notify care team members with the AI-generated summary.
+
         Args:
             db: Database session
             patient_name: Patient's name
-            patient_phone: Patient's phone number
-            responses: Form responses
-            
+            patient_phone: Patient's phone number (canonical E.164)
+            ai_summary: Result from GeminiFormsService.generate_form_summary
+            responses: Raw form responses
+
         Returns:
-            Dictionary with summary text and notification results
+            Dictionary with notification results (emails_sent, sms_sent, errors)
         """
-        # Generate AI summary using OpenRouter
-        summary_result = self.ai_service.generate_form_summary(
-            patient_name=patient_name,
-            patient_phone=patient_phone,
-            form_responses=responses
-        )
-        
-        # Find patient and their care team
-        patient = db.query(Patient).filter_by(phone_number=patient_phone).first()
-        
         notification_results = {
             'emails_sent': 0,
             'sms_sent': 0,
             'errors': []
         }
-        
+
+        if not ai_summary:
+            msg = 'Skipping care team notification: no AI summary available'
+            notification_results['errors'].append(msg)
+            print(f"[NOTIFY] WARNING: {msg}")
+            return notification_results
+
+        # Find patient using phone-tolerant lookup
+        print(f"[NOTIFY] Looking up patient by phone: {patient_phone}")
+        patient = self._find_patient_by_phone(db, patient_phone)
+
         if patient:
-            # Get care team members
+            print(f"[NOTIFY] Patient found: {patient.name} (id={patient.id}, phone={patient.phone_number})")
             care_team_members = db.query(CareTeamMember).filter_by(patient_id=patient.id).all()
-            
+            print(f"[NOTIFY] Care team members found: {len(care_team_members)}")
+
             if care_team_members:
-                # Convert to dictionaries
                 care_team_list = [{
                     'id': m.id,
                     'name': m.name,
@@ -73,23 +182,26 @@ class FormsService:
                     'email': m.email,
                     'is_primary': m.is_primary
                 } for m in care_team_members]
-                
-                # Send notifications to all care team members
+
                 notification_results = self.notification_service.send_summary_to_care_team(
                     care_team_members=care_team_list,
                     patient_name=patient_name,
-                    summary=summary_result,
+                    summary=ai_summary,
                     form_responses=responses
                 )
+                print(f"[NOTIFY] Results -> emails_sent={notification_results['emails_sent']}, "
+                      f"sms_sent={notification_results['sms_sent']}, "
+                      f"errors={notification_results['errors']}")
             else:
-                notification_results['errors'].append('No care team members found for this patient')
+                msg = f'No care team members found for patient id={patient.id} ({patient_phone})'
+                notification_results['errors'].append(msg)
+                print(f"[NOTIFY] WARNING: {msg}")
         else:
-            notification_results['errors'].append('Patient not found in database')
-        
-        return {
-            'summary': summary_result,
-            'notifications': notification_results
-        }
+            msg = f'Patient not found in DB for phone: {patient_phone}'
+            notification_results['errors'].append(msg)
+            print(f"[NOTIFY] WARNING: {msg}")
+
+        return notification_results
     
 
     def send_form_link(
@@ -242,30 +354,15 @@ class FormsService:
 
         db = self._get_db()
         try:
-            # Strategy 1: Find the most recent unsaved form_response record for this patient
-            existing = (
-                db.query(FormResponse)
-                .filter_by(patient_phone=patient_phone)
-                .filter(FormResponse.submitted_at == None)
-                .order_by(FormResponse.created_at.desc())
-                .first()
-            )
-            
-            # Strategy 2: If no pending record, check for recent record within last 24 hours
-            # This prevents duplicate submissions if patient submits form multiple times
-            if not existing:
-                from datetime import timedelta
-                twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
-                existing = (
-                    db.query(FormResponse)
-                    .filter_by(patient_phone=patient_phone)
-                    .filter(FormResponse.created_at >= twenty_four_hours_ago)
-                    .order_by(FormResponse.created_at.desc())
-                    .first()
-                )
+            # Find existing pending/recent record with phone-format-tolerant lookup
+            existing = self._find_existing_form_response(db, patient_phone)
 
             if existing:
-                # Update existing pending record
+                print(f"[FORMS] Updating existing FormResponse id={existing.id} (stored phone={existing.patient_phone})")
+                # Always use the stored phone number so all downstream lookups stay consistent
+                canonical_phone = existing.patient_phone
+
+                # Update existing record
                 existing.submitted_at = submitted_at
                 existing.patient_name = payload.get('patient_name', existing.patient_name)
                 existing.recently_discharged = responses.get('recently_discharged')
@@ -274,17 +371,23 @@ class FormsService:
                 existing.care_team_notes = responses.get('care_team_notes')
                 existing.contact_request = responses.get('contact_request')
                 existing.raw_responses = responses
-                
+
                 # Update patient follow_up status to Completed
-                patient = db.query(Patient).filter_by(phone_number=patient_phone).first()
+                patient = self._find_patient_by_phone(db, canonical_phone)
                 if patient:
                     patient.follow_up = 'Completed'
-                
+
                 db.commit()
                 db.refresh(existing)
                 record = existing
+                patient_phone = canonical_phone  # use stored format for all downstream calls
             else:
-                # Create new record (patient submitted without SMS link being sent via API)
+                print(f"[FORMS] No existing record found for {patient_phone}. Creating new FormResponse.")
+                # Normalize phone to E.164 for new records (prepend '+' if missing)
+                if not patient_phone.startswith('+'):
+                    patient_phone = '+' + patient_phone
+
+                # Create new record
                 record = FormResponse(
                     patient_phone=patient_phone,
                     patient_name=payload.get('patient_name'),
@@ -297,34 +400,45 @@ class FormsService:
                     raw_responses=responses
                 )
                 db.add(record)
-                
+
                 # Update patient follow_up status to Completed
-                patient = db.query(Patient).filter_by(phone_number=patient_phone).first()
+                patient = self._find_patient_by_phone(db, patient_phone)
                 if patient:
                     patient.follow_up = 'Completed'
-                
+
                 db.commit()
                 db.refresh(record)
 
-            # Generate AI summary and notify care team
-            summary_result = None
+            # Step 1: Generate AI summary and save to DB immediately
+            ai_summary = None
             try:
-                summary_result = self._generate_and_notify_care_team(
-                    db, 
-                    record.patient_name, 
+                print(f"[FORMS] Generating AI summary for {record.patient_name} ({patient_phone})")
+                ai_summary = self.ai_service.generate_form_summary(
+                    patient_name=record.patient_name,
+                    patient_phone=patient_phone,
+                    form_responses=responses
+                )
+                record.summary = ai_summary.get('formatted_response', '')
+                db.commit()
+                db.refresh(record)
+                print(f"[FORMS] Summary saved to DB for record id={record.id}")
+            except Exception as e:
+                print(f"[FORMS] ERROR: Failed to generate/save summary: {str(e)}")
+                import traceback
+                traceback.print_exc()
+
+            # Step 2: Notify care team (runs independently — summary already saved above)
+            notification_info = None
+            try:
+                notification_info = self._notify_care_team(
+                    db,
+                    record.patient_name,
                     patient_phone,
+                    ai_summary,
                     responses
                 )
-                
-                # Save summary to database
-                if summary_result and 'summary' in summary_result:
-                    # Store the formatted_response in the database
-                    record.summary = summary_result['summary'].get('formatted_response', '')
-                    db.commit()
-                    db.refresh(record)
-                    
             except Exception as e:
-                print(f"Warning: Failed to generate summary or notify care team: {str(e)}")
+                print(f"[NOTIFY] ERROR: Failed to notify care team: {str(e)}")
                 import traceback
                 traceback.print_exc()
 
@@ -335,8 +449,9 @@ class FormsService:
                 'patient_name': record.patient_name,
                 'submitted_at': record.submitted_at.isoformat() if record.submitted_at else None,
                 'responses_saved': responses,
-                'summary_generated': summary_result is not None,
-                'summary': summary_result
+                'summary_generated': ai_summary is not None,
+                'notifications': notification_info,
+                'summary': ai_summary
             }
         finally:
             db.close()

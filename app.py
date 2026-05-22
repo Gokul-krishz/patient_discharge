@@ -3,6 +3,8 @@ Flask REST API for File Text Extraction and Discharge Summary
 Clean architecture with separated concerns
 """
 import os
+import sys
+import logging
 from flask import Flask, request
 from flask_restx import Api, Resource, fields
 from werkzeug.utils import secure_filename
@@ -13,6 +15,18 @@ from models import init_db
 from services import FileExtractor, AIService, SMSService, PatientChatService, ConversationAgent
 from api import forms_ns, patients_ns, adt_patients_ns
 from api.care_team_api import care_team_ns
+
+# Configure logging to show all output immediately
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# Force unbuffered output for print statements
+sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
 
 # Initialize Flask app
 app = Flask(__name__)
