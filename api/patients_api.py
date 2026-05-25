@@ -147,6 +147,7 @@ class PatientsList(Resource):
                             }
                     
                     patient_data = {
+                        'id': patient.id,
                         'patient_id': f'P{str(patient.id).zfill(6)}',
                         'name': patient.name,
                         'phone_number': patient.phone_number,

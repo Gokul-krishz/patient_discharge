@@ -243,30 +243,19 @@ class FormsService:
                 adt_patient.status = 'Discharged'
                 adt_patient.discharge_date = datetime.utcnow()
                 
-                # Create or update Patient record
-                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
-                if not patient:
-                    patient = Patient(
-                        name=patient_name,
-                        phone_number=phone_number,
-                        hospital=adt_patient.hospital,
-                        admission_date=adt_patient.admission_date,
-                        discharge_date=adt_patient.discharge_date,
-                        status='Discharged',
-                        follow_up='Link Sent',
-                        discharge_summary=adt_patient.discharge_summary
-                    )
-                    db.add(patient)
-                else:
-                    # Update existing patient
-                    patient.name = patient_name
-                    patient.hospital = adt_patient.hospital
-                    patient.admission_date = adt_patient.admission_date
-                    patient.discharge_date = adt_patient.discharge_date
-                    patient.status = 'Discharged'
-                    patient.follow_up = 'Link Sent'
-                    if adt_patient.discharge_summary:
-                        patient.discharge_summary = adt_patient.discharge_summary
+                # Always create a new Patient record (allow multiple records with same phone number)
+                patient = Patient(
+                    name=patient_name,
+                    phone_number=phone_number,
+                    hospital=adt_patient.hospital,
+                    admission_date=adt_patient.admission_date,
+                    discharge_date=adt_patient.discharge_date,
+                    status='Discharged',
+                    follow_up='Link Sent',
+                    discharge_summary=adt_patient.discharge_summary,
+                    care_team=adt_patient.care_team
+                )
+                db.add(patient)
                 
                 db.commit()
             
@@ -285,12 +274,8 @@ class FormsService:
 
             sms_result = self.sms_service.send_sms(phone_number, message)
 
-            # Update patient follow_up status if not from ADT workflow
-            if not adt_patient_id:
-                patient = db.query(Patient).filter_by(phone_number=phone_number).first()
-                if patient:
-                    patient.follow_up = 'Link Sent'
-                    db.commit()
+            # Note: We no longer update existing patient records since multiple patients 
+            # can have the same phone number. Each form link send creates a new patient record.
             
             # Record the form link was sent
             record = FormResponse(

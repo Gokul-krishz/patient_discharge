@@ -54,21 +54,29 @@ class ActionLogger:
             limit: Maximum number of logs to return
         
         Returns:
-            list: List of log entries
+            list: List of log entries with patient info
         """
         try:
             with engine.connect() as conn:
                 result = conn.execute(text("""
-                    SELECT id, action, metadata, timestamp
-                    FROM patient_action_logs
-                    WHERE patient_id = :patient_id
-                    ORDER BY timestamp DESC
+                    SELECT 
+                        pal.id,
+                        pal.patient_id,
+                        p.name as patient_name,
+                        p.phone_number,
+                        pal.action,
+                        pal.metadata,
+                        pal.timestamp
+                    FROM patient_action_logs pal
+                    LEFT JOIN patients p ON pal.patient_id = p.id
+                    WHERE pal.patient_id = :patient_id
+                    ORDER BY pal.timestamp DESC
                     LIMIT :limit;
                 """), {'patient_id': patient_id, 'limit': limit})
                 
                 logs = []
                 for row in result:
-                    metadata = row[2]
+                    metadata = row[5]
                     if isinstance(metadata, str):
                         metadata = json.loads(metadata)
                     elif metadata is None:
@@ -76,9 +84,12 @@ class ActionLogger:
                     
                     logs.append({
                         'id': row[0],
-                        'action': row[1],
+                        'patient_id': row[1],
+                        'patient_name': row[2],
+                        'phone_number': row[3],
+                        'action': row[4],
                         'metadata': metadata,
-                        'timestamp': row[3].isoformat() if row[3] else None
+                        'timestamp': row[6].isoformat() if row[6] else None
                     })
                 return logs
         except Exception as e:

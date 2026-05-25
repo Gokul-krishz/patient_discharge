@@ -50,6 +50,7 @@ export class McpDemoComponent implements OnInit, OnDestroy {
   loadingPatients = false;
   selectedPatientId: string = '';
   filteredLogs: any[] = [];
+  loadingFilteredLogs = false;
 
   constructor(
     private mcpService: McpService,
@@ -210,7 +211,6 @@ export class McpDemoComponent implements OnInit, OnDestroy {
     this.mcpService.getActionLogs(30).subscribe({
       next: (res: any) => {
         this.actionLogs = res.logs || [];
-        this.filterLogsByPatient(); // Apply current filter
         this.loadingLogs = false;
         this.cdr.detectChanges();
       },
@@ -218,7 +218,6 @@ export class McpDemoComponent implements OnInit, OnDestroy {
         console.error('Error loading action logs:', err);
         this.loadingLogs = false;
         this.actionLogs = [];
-        this.filteredLogs = [];
         this.cdr.detectChanges();
       }
     });
@@ -289,15 +288,51 @@ export class McpDemoComponent implements OnInit, OnDestroy {
     });
   }
 
-  filterLogsByPatient(): void {
+  searchPatientLogs(): void {
+    this.loadingFilteredLogs = true;
+    
     if (!this.selectedPatientId || this.selectedPatientId === '') {
-      // Show all logs
-      this.filteredLogs = [...this.actionLogs];
+      // Show all logs when "All Patients" is selected
+      this.mcpService.getActionLogs(30).subscribe({
+        next: (res: any) => {
+          this.filteredLogs = res.logs || [];
+          this.loadingFilteredLogs = false;
+          this.cdr.detectChanges();
+        },
+        error: (err: any) => {
+          console.error('Error loading all logs:', err);
+          this.filteredLogs = [];
+          this.loadingFilteredLogs = false;
+          this.cdr.detectChanges();
+        }
+      });
     } else {
-      // Filter by selected patient ID
-      const patientId = parseInt(this.selectedPatientId);
-      this.filteredLogs = this.actionLogs.filter(log => log.patient_id === patientId);
+      // Fetch logs for specific patient using path parameter: /api/action-logs/{patientId}
+      const patientId = parseInt(this.selectedPatientId.toString());
+      
+      console.log('Selected Patient ID:', this.selectedPatientId, 'Parsed:', patientId);
+      
+      if (isNaN(patientId)) {
+        console.error('Invalid patient ID:', this.selectedPatientId);
+        this.filteredLogs = [];
+        this.loadingFilteredLogs = false;
+        this.cdr.detectChanges();
+        return;
+      }
+      
+      this.mcpService.getPatientActionLogs(patientId).subscribe({
+        next: (response) => {
+          this.filteredLogs = response.logs || [];
+          this.loadingFilteredLogs = false;
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          console.error('Error loading patient logs:', err);
+          this.filteredLogs = [];
+          this.loadingFilteredLogs = false;
+          this.cdr.detectChanges();
+        }
+      });
     }
-    this.cdr.detectChanges();
   }
 }

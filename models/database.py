@@ -19,7 +19,7 @@ class Patient(Base):
     
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
-    phone_number = Column(String(20), unique=True, nullable=False)
+    phone_number = Column(String(20), unique=False, nullable=False)
     hospital = Column(String(255), nullable=True)
     admission_date = Column(DateTime, nullable=True)
     discharge_date = Column(DateTime, nullable=True)
