@@ -30,7 +30,7 @@ create_adt_patient_model = adt_patients_ns.model('CreateADTPatient', {
     'patient_name': fields.String(required=True, description='Patient name'),
     'mobile_number': fields.String(required=True, description='Patient mobile number'),
     'hospital': fields.String(required=True, description='Hospital name or ID'),
-    'description': fields.String(required=True, description='Patient description/notes'),
+    'description': fields.String(required=False, description='Patient description/notes'),
     'care_team': fields.Integer(description='Care team member ID')
 })
 
@@ -58,11 +58,11 @@ class ADTPatientsList(Resource):
             patient_name = data.get('patient_name')
             mobile_number = data.get('mobile_number')
             hospital = data.get('hospital')
-            description = data.get('description')
+            description = data.get('description', '')
             care_team = data.get('care_team')
             
-            if not patient_name or not mobile_number or not hospital or not description:
-                return {'error': 'Missing required fields: patient_name, mobile_number, hospital, description'}, 400
+            if not patient_name or not mobile_number or not hospital:
+                return {'error': 'Missing required fields: patient_name, mobile_number, hospital'}, 400
             
             db = SessionLocal()
             try:

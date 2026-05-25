@@ -64,6 +64,7 @@ export class McpDemoComponent implements OnInit, OnDestroy {
     this.loadTools();
     this.loadActionLogs();
     this.loadPatients();
+    this.searchPatientLogs(); // Load all patient logs on initial load
     
     // Auto-refresh logs every 10 seconds
     this.logsRefreshInterval = setInterval(() => {

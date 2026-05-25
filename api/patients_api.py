@@ -354,18 +354,15 @@ class HospitalsList(Resource):
     def get(self):
         """Get list of unique hospitals for filtering"""
         try:
+            from models.database import Hospital
+            
             db = SessionLocal()
             try:
-                # Get distinct hospitals
-                hospitals = (
-                    db.query(Patient.hospital)
-                    .filter(Patient.hospital.isnot(None))
-                    .distinct()
-                    .order_by(Patient.hospital)
-                    .all()
-                )
+                # Fetch hospitals from hospitals table
+                hospitals = db.query(Hospital).order_by(Hospital.name).all()
                 
-                hospital_list = [h[0] for h in hospitals if h[0]]
+                # Return list of hospital names (keeping same structure)
+                hospital_list = [hospital.name for hospital in hospitals]
                 
                 return {
                     'hospitals': hospital_list,

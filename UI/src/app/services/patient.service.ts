@@ -144,4 +144,48 @@ export class PatientService {
   sendFormLink(patientId: string): Observable<SendFormLinkResponse> {
     return this.http.post<SendFormLinkResponse>(`${this.BASE_URL}/patients/send-form-link`, { patient_id: patientId });
   }
+
+  getCareTeamMembers(): Observable<CareTeamMembersResponse> {
+    return this.http.get<CareTeamMembersResponse>(`${this.BASE_URL}/care-team/members`);
+  }
+
+  addAdtPatient(payload: AddAdtPatientPayload): Observable<AddAdtPatientResponse> {
+    return this.http.post<AddAdtPatientResponse>(`${this.BASE_URL}/adt_patients`, payload);
+  }
+}
+
+
+export interface CareTeamMember {
+  id: number;
+  name: string;
+  role: string;
+  phone_number: string | null;
+  email: string | null;
+}
+
+export interface CareTeamMembersResponse {
+  care_team_members: CareTeamMember[];
+  total: number;
+}
+
+export interface AddAdtPatientPayload {
+  patient_name: string;
+  mobile_number: string;
+  hospital: string;
+  description?: string;
+  care_team?: number;
+}
+
+export interface AddAdtPatientResponse {
+  success: boolean;
+  message: string;
+  patient: {
+    patient_id: string;
+    id: number;
+    name: string;
+    phone_number: string;
+    hospital: string;
+    admission_date: string;
+    status: string;
+  };
 }

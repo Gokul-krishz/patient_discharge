@@ -169,9 +169,23 @@ class FormsService:
         patient = self._find_patient_by_phone(db, patient_phone)
 
         if patient:
-            print(f"[NOTIFY] Patient found: {patient.name} (id={patient.id}, phone={patient.phone_number})")
-            care_team_members = db.query(CareTeamMember).filter_by(patient_id=patient.id).all()
-            print(f"[NOTIFY] Care team members found: {len(care_team_members)}")
+            print(f"[NOTIFY] Patient found: {patient.name} (id={patient.id}, phone={patient.phone_number}, care_team={patient.care_team})")
+            
+            # Fetch care team member using care_team ID from patients table
+            care_team_members = []
+            
+            if patient.care_team:
+                print(f"[NOTIFY] Fetching care team member by ID: {patient.care_team}")
+                care_team_member = db.query(CareTeamMember).filter_by(id=patient.care_team).first()
+                if care_team_member:
+                    care_team_members.append(care_team_member)
+                    print(f"[NOTIFY] Found care team member: {care_team_member.name} (role: {care_team_member.role})")
+                else:
+                    print(f"[NOTIFY] WARNING: Care team member with ID {patient.care_team} not found in care_team_members table")
+            else:
+                print(f"[NOTIFY] WARNING: No care_team ID set for patient {patient.name}")
+            
+            print(f"[NOTIFY] Total care team members to notify: {len(care_team_members)}")
 
             if care_team_members:
                 care_team_list = [{

@@ -30,7 +30,6 @@ class Patient(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     conversations = relationship('Conversation', back_populates='patient')
-    care_team_members = relationship('CareTeamMember', back_populates='patient')
     form_responses = relationship('FormResponse', back_populates='patient')
 
 
@@ -105,7 +104,6 @@ class CareTeamMember(Base):
     __tablename__ = 'care_team_members'
     
     id = Column(Integer, primary_key=True)
-    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
     name = Column(String(255), nullable=False)
     role = Column(String(100), nullable=False)  # e.g., 'Nephrologist', 'Nurse', 'Dietitian'
     phone_number = Column(String(20), nullable=True)
@@ -115,8 +113,6 @@ class CareTeamMember(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    patient = relationship('Patient', back_populates='care_team_members')
 
 
 class Hospital(Base):
