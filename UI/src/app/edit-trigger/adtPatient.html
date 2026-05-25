@@ -100,6 +100,13 @@
             <option value="Admitted">Admitted</option>
             <option value="Discharged">Discharged</option>
           </select>
+          <button class="btn-add-patient" (click)="openAddPatientModal()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Patient
+          </button>
         </div>
 
         <div class="table-container" *ngIf="!isLoading && !errorMessage">
@@ -130,16 +137,25 @@
                 <td>{{ patient.admissionDate }}</td>
                 <td>{{ patient.dischargeDate }}</td>
                 <td>
-                  <button
-                    class="status-action-btn"
-                    [ngClass]="isDischargedBtn(patient) ? 'discharged' : 'admitted'"
-                    [disabled]="isDischargedBtn(patient) || isSending(patient.id)"
-                    (click)="onStatusButtonClick(patient)">
-                    <span *ngIf="isSending(patient.id)">Sending...</span>
-                    <span *ngIf="!isSending(patient.id)">
-                      {{ isDischargedBtn(patient) ? 'Discharged' : 'Admitted' }}
-                    </span>
-                  </button>
+                  <div class="status-dropdown-wrapper">
+                    <button
+                      class="status-dropdown-btn"
+                      [ngClass]="isDischargedBtn(patient) ? 'discharged' : 'admitted'"
+                      [disabled]="isDischargedBtn(patient) || isSending(patient.id)"
+                      (click)="toggleDropdown(patient.id, $event)">
+                      <span *ngIf="isSending(patient.id)">Sending...</span>
+                      <span *ngIf="!isSending(patient.id)">
+                        {{ isDischargedBtn(patient) ? 'Discharged' : patient.status }}
+                      </span>
+                      <svg *ngIf="!isDischargedBtn(patient) && !isSending(patient.id)" width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                        <path d="M6 9L1 4h10z"/>
+                      </svg>
+                    </button>
+                    <div class="status-dropdown-menu" *ngIf="openDropdownId === patient.id && !isDischargedBtn(patient)">
+                      <div class="dropdown-item" (click)="onStatusChange(patient, 'Admitted')">Admitted</div>
+                      <div class="dropdown-item" (click)="onStatusChange(patient, 'Discharged')">Discharged</div>
+                    </div>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -189,4 +205,70 @@
     <line *ngIf="toastType === 'error'" x1="6" y1="6" x2="18" y2="18"/>
   </svg>
   {{ toastMessage }}
+</div>
+
+<div class="modal-overlay" *ngIf="showAddPatientModal" (click)="closeAddPatientModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Add Patient</h2>
+      <button class="modal-close" (click)="closeAddPatientModal()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" placeholder="Enter name" [(ngModel)]="newPatient.patient_name" [disabled]="isSubmitting">
+      </div>
+      <div class="form-group">
+        <label>Mobile</label>
+        <input type="text" placeholder="Enter mobile number" [(ngModel)]="newPatient.mobile_number" [disabled]="isSubmitting">
+      </div>
+      <div class="form-group">
+        <label>Hospital</label>
+        <select [(ngModel)]="newPatient.hospital" [disabled]="isSubmitting">
+          <option value="">Select hospital</option>
+          <option *ngFor="let hospital of hospitals" [value]="hospital">{{ hospital }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea placeholder="Enter description" [(ngModel)]="newPatient.description" rows="3" [disabled]="isSubmitting"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Careteam ({{ careTeamMembers.length }} members)</label>
+        <select [(ngModel)]="newPatient.care_team" [disabled]="isSubmitting">
+          <option [value]="0">Select careteam</option>
+          <option *ngFor="let member of careTeamMembers" [value]="member.id">{{ member.name }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" (click)="closeAddPatientModal()" [disabled]="isSubmitting">Cancel</button>
+      <button class="btn-save" (click)="onAddPatient()" [disabled]="isSubmitting">
+        {{ isSubmitting ? 'Saving...' : 'Save' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay" *ngIf="showConfirmDischarge" (click)="closeConfirmDischarge()">
+  <div class="confirm-dialog" (click)="$event.stopPropagation()">
+    <div class="confirm-icon">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
+    <h3>Confirm Discharge</h3>
+    <p>Are you sure want discharge this Patient?<br>After discharge post-hospital outreach will follow-up</p>
+    <div class="confirm-actions">
+      <button class="btn-no" (click)="closeConfirmDischarge()">No</button>
+      <button class="btn-yes" (click)="confirmDischarge()">Yes</button>
+    </div>
+  </div>
 </div>
