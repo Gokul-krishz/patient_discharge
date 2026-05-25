@@ -51,6 +51,7 @@ export class AdtPatientComponent implements OnInit {
   showConfirmDischarge = false;
   selectedPatientForDischarge: Patient | null = null;
   openDropdownId: string | null = null;
+  showProfileDropdown = false;
 
   constructor(
     private router: Router,
@@ -67,10 +68,11 @@ export class AdtPatientComponent implements OnInit {
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: Event): void {
     this.openDropdownId = null;
+    this.showProfileDropdown = false;
   }
 
   loadHospitals(): void {
-    this.patientService.getAdtHospitals().subscribe({
+    this.patientService.getHospitals().subscribe({
       next: (response: HospitalsResponse) => {
         this.hospitals = response.hospitals;
         this.cdr.detectChanges();
@@ -118,7 +120,7 @@ export class AdtPatientComponent implements OnInit {
     return {
       id:            p.patient_id,
       name:          p.name,
-      phone:         p.phone_number,
+      phone:         this.formatPhoneNumber(p.phone_number),
       hospital:      p.hospital || '-',
       admissionDate: this.formatDate(p.admission_date),
       dischargeDate: this.formatDate(p.discharge_date),
@@ -127,6 +129,14 @@ export class AdtPatientComponent implements OnInit {
       avatar:        this.getInitials(p.name),
       latestFormResponse: null
     };
+  }
+
+  private formatPhoneNumber(phone: string): string {
+    // Replace +91 with +1 for display purposes only
+    if (phone && phone.startsWith('+91')) {
+      return phone.replace('+91', '+1');
+    }
+    return phone;
   }
 
   private formatDate(iso: string | null): string {
@@ -204,7 +214,13 @@ export class AdtPatientComponent implements OnInit {
     }, 3000);
   }
 
+  toggleProfileDropdown(event: Event): void {
+    event.stopPropagation();
+    this.showProfileDropdown = !this.showProfileDropdown;
+  }
+
   logout(): void {
+    this.showProfileDropdown = false;
     this.router.navigate(['/login']);
   }
 
@@ -253,16 +269,32 @@ export class AdtPatientComponent implements OnInit {
     this.showAddPatientModal = false;
   }
 
+  isFormValid(): boolean {
+    return !!(
+      this.newPatient.patient_name?.trim() &&
+      this.newPatient.mobile_number?.trim() &&
+      this.newPatient.hospital?.trim() &&
+      this.newPatient.care_team > 0
+    );
+  }
+
   onAddPatient(): void {
-    if (!this.newPatient.patient_name || !this.newPatient.mobile_number || !this.newPatient.hospital) {
+    if (!this.newPatient.patient_name || !this.newPatient.mobile_number || !this.newPatient.hospital || !this.newPatient.care_team) {
       this.showToast('Please fill in all required fields', 'error');
       return;
     }
 
     this.isSubmitting = true;
+    
+    // Add +91 prefix to mobile number if not already present
+    let mobileNumber = this.newPatient.mobile_number.trim();
+    if (!mobileNumber.startsWith('+91')) {
+      mobileNumber = '+91' + mobileNumber;
+    }
+    
     const payload: AddAdtPatientPayload = {
       patient_name: this.newPatient.patient_name,
-      mobile_number: this.newPatient.mobile_number,
+      mobile_number: mobileNumber,
       hospital: this.newPatient.hospital,
       description: this.newPatient.description,
       care_team: this.newPatient.care_team || undefined
@@ -271,10 +303,10 @@ export class AdtPatientComponent implements OnInit {
     this.patientService.addAdtPatient(payload).subscribe({
       next: (response) => {
         this.isSubmitting = false;
-        this.showToast('Patient added successfully', 'success');
-        this.closeAddPatientModal();
-        this.loadPatients(1);
         this.cdr.detectChanges();
+        this.closeAddPatientModal();
+        this.showToast('Patient added successfully', 'success');
+        this.loadPatients(1);
       },
       error: (err) => {
         this.isSubmitting = false;

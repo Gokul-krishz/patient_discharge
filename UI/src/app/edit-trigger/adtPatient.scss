@@ -229,6 +229,7 @@
 }
 
 .user-menu {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -249,6 +250,42 @@
 
   svg {
     color: #95a5a6;
+  }
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 160px;
+  z-index: 1000;
+  overflow: hidden;
+
+  button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: none;
+    background: white;
+    color: #2c3e50;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    text-align: left;
+
+    svg {
+      color: #e74c3c;
+      flex-shrink: 0;
+    }
+
+    &:hover {
+      background: #f8f9fa;
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -77,6 +77,7 @@ export class DashboardComponent implements OnInit {
   toastType: 'success' | 'error' = 'success';
   toastVisible = false;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  showProfileDropdown = false;
 
   readonly responseLabels: Record<string, string> = {
     recently_discharged: 'Were you recently discharged?',
@@ -92,6 +93,16 @@ export class DashboardComponent implements OnInit {
     this.loadPatients();
     this.loadPendingFollowUps();
     this.loadHospitals();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event): void {
+    this.showProfileDropdown = false;
+  }
+
+  toggleProfileDropdown(event: Event): void {
+    event.stopPropagation();
+    this.showProfileDropdown = !this.showProfileDropdown;
   }
 
   loadHospitals(): void {
@@ -172,7 +183,7 @@ export class DashboardComponent implements OnInit {
     return {
       id: p.patient_id,
       name: p.name,
-      phone: p.phone_number,
+      phone: this.formatPhoneNumber(p.phone_number),
       hospital: p.hospital,
       admissionDate: p.admission_date,
       dischargeDate: p.discharge_date,
@@ -181,6 +192,14 @@ export class DashboardComponent implements OnInit {
       avatar: this.getInitials(p.name),
       latestFormResponse: p.latest_form_response
     };
+  }
+
+  private formatPhoneNumber(phone: string): string {
+    // Replace +91 with +1 for display purposes only
+    if (phone && phone.startsWith('+91')) {
+      return phone.replace('+91', '+1');
+    }
+    return phone;
   }
 
   private getInitials(name: string): string {
@@ -197,6 +216,7 @@ export class DashboardComponent implements OnInit {
   }
 
   logout(): void {
+    this.showProfileDropdown = false;
     this.router.navigate(['/login']);
   }
 
