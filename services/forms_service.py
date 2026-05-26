@@ -109,15 +109,26 @@ class FormsService:
 
     def _find_patient_by_phone(self, db, patient_phone: str):
         """
-        Find a Patient record tolerating phone format differences.
+        Find the most recent Patient record tolerating phone format differences.
+        When multiple patients share the same phone, returns the latest created one.
         Tries exact, +prefix, and last-10-digit suffix match.
         """
-        patient = db.query(Patient).filter_by(phone_number=patient_phone).first()
+        patient = (
+            db.query(Patient)
+            .filter_by(phone_number=patient_phone)
+            .order_by(Patient.created_at.desc())
+            .first()
+        )
         if patient:
             return patient
 
         if not patient_phone.startswith('+'):
-            patient = db.query(Patient).filter_by(phone_number='+' + patient_phone).first()
+            patient = (
+                db.query(Patient)
+                .filter_by(phone_number='+' + patient_phone)
+                .order_by(Patient.created_at.desc())
+                .first()
+            )
             if patient:
                 return patient
 
@@ -127,6 +138,7 @@ class FormsService:
             patient = (
                 db.query(Patient)
                 .filter(Patient.phone_number.like(f'%{last10}'))
+                .order_by(Patient.created_at.desc())
                 .first()
             )
         return patient
@@ -374,7 +386,10 @@ class FormsService:
                 # Update patient follow_up status to Completed
                 patient = self._find_patient_by_phone(db, canonical_phone)
                 if patient:
+                    print(f"[FORMS] Updating follow_up to 'Completed' for latest patient: {patient.name} (ID: {patient.id}, phone: {patient.phone_number})")
                     patient.follow_up = 'Completed'
+                else:
+                    print(f"[FORMS] WARNING: No patient found with phone {canonical_phone} to update follow_up status")
 
                 db.commit()
                 db.refresh(existing)
@@ -403,7 +418,10 @@ class FormsService:
                 # Update patient follow_up status to Completed
                 patient = self._find_patient_by_phone(db, patient_phone)
                 if patient:
+                    print(f"[FORMS] Updating follow_up to 'Completed' for latest patient: {patient.name} (ID: {patient.id}, phone: {patient.phone_number})")
                     patient.follow_up = 'Completed'
+                else:
+                    print(f"[FORMS] WARNING: No patient found with phone {patient_phone} to update follow_up status")
 
                 db.commit()
                 db.refresh(record)

@@ -188,13 +188,16 @@ class GoogleFormsWebhook(Resource):
                         
                         # Get care team member details
                         from models.database import CareTeamMember
-                        care_team = db.query(CareTeamMember).filter_by(patient_id=patient.id).all()
-                        care_team_details = [{
-                            'name': m.name,
-                            'role': m.role,
-                            'email': m.email,
-                            'phone': m.phone_number
-                        } for m in care_team]
+                        care_team_details = []
+                        if patient.care_team:
+                            care_team_member = db.query(CareTeamMember).filter_by(id=patient.care_team).first()
+                            if care_team_member:
+                                care_team_details = [{
+                                    'name': care_team_member.name,
+                                    'role': care_team_member.role,
+                                    'email': care_team_member.email,
+                                    'phone': care_team_member.phone_number
+                                }]
                         
                         # Determine status
                         if emails_sent_count > 0 or sms_sent_count > 0:
