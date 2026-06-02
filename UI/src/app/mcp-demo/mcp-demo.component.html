@@ -12,7 +12,7 @@
         </svg>
         <div class="logo-text" *ngIf="sidenavOpen">
           <h1>Davita</h1>
-          <p>MCP Architecture Demo</p>
+          <p>Patient Discharge System</p>
         </div>
       </div>
     </div>
@@ -36,9 +36,9 @@
       </a>
       <a class="nav-item active">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
         </svg>
-        <span *ngIf="sidenavOpen">Architecture Demo</span>
+        <span *ngIf="sidenavOpen">Patient Logs</span>
       </a>
     </nav>
 
@@ -63,51 +63,112 @@
   <main class="main-content">
     <header class="top-header">
       <div class="header-left">
-        <h1>MCP Architecture Demo</h1>
-        <p>Interactive visualization of AI Agent + MCP Server + Tools</p>
+        <h1>Patient Discharge Logs</h1>
+        <p>Track and analyze patient discharge actions, SMS outreach, and AI-generated summaries</p>
       </div>
       <div class="header-right">
         <div class="status-indicator" [class.active]="serverStatus?.mcp_enabled">
           <span class="dot"></span>
-          {{ serverStatus?.mcp_enabled ? 'MCP Server Online' : 'MCP Offline' }}
+          {{ serverStatus?.mcp_enabled ? 'System Online' : 'System Offline' }}
         </div>
         <div class="status-badge" *ngIf="serverStatus?.mcp_server">
-          {{ serverStatus?.mcp_server?.registered_tools }} Tools Registered
+          {{ serverStatus?.mcp_server?.registered_tools }} Actions Tracked
         </div>
       </div>
     </header>
 
     <div class="content-area" *ngIf="!isLoading">
 
-      <!-- Architecture Flow Diagram -->
+      <!-- Action Flow Diagram -->
       <section class="architecture-section">
         <h2 class="section-title">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
-          Architecture Flow
+          Patient Discharge Action Flow
         </h2>
         <div class="arch-flow">
-          <ng-container *ngFor="let layer of layers; let i = index; let last = last">
-            <div class="arch-node"
-                 [class.active]="activeLayerId === layer.id"
-                 [class.completed]="traceSteps.length > 0 && isLayerCompleted(layer.id)"
-                 [attr.data-type]="layer.type">
-              <div class="node-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path [attr.d]="getLayerIcon(layer.type)"/>
-                </svg>
-              </div>
-              <div class="node-label">{{ layer.name }}</div>
-              <div class="node-tech">{{ layer.tech }}</div>
-            </div>
-            <div class="arch-arrow" *ngIf="!last" [class.active]="isArrowActive(i)">
-              <svg width="40" height="20" viewBox="0 0 40 20">
-                <line x1="0" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3"/>
-                <polygon points="30,5 40,10 30,15" fill="currentColor"/>
+          <!-- Step 1: Patient Discharge -->
+          <div class="arch-node" data-type="patient">
+            <div class="node-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
               </svg>
             </div>
-          </ng-container>
+            <div class="node-label">Patient Discharge</div>
+            <div class="node-tech">ADT Event</div>
+          </div>
+          <div class="arch-arrow">
+            <svg width="40" height="20" viewBox="0 0 40 20">
+              <line x1="0" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3"/>
+              <polygon points="30,5 40,10 30,15" fill="currentColor"/>
+            </svg>
+          </div>
+
+          <!-- Step 2: SMS Outreach -->
+          <div class="arch-node" data-type="sms">
+            <div class="node-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+            </div>
+            <div class="node-label">SMS Sent</div>
+            <div class="node-tech">Form Link</div>
+          </div>
+          <div class="arch-arrow">
+            <svg width="40" height="20" viewBox="0 0 40 20">
+              <line x1="0" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3"/>
+              <polygon points="30,5 40,10 30,15" fill="currentColor"/>
+            </svg>
+          </div>
+
+          <!-- Step 3: Form Submission -->
+          <div class="arch-node" data-type="form">
+            <div class="node-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+              </svg>
+            </div>
+            <div class="node-label">Form Submitted</div>
+            <div class="node-tech">Patient Response</div>
+          </div>
+          <div class="arch-arrow">
+            <svg width="40" height="20" viewBox="0 0 40 20">
+              <line x1="0" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3"/>
+              <polygon points="30,5 40,10 30,15" fill="currentColor"/>
+            </svg>
+          </div>
+
+          <!-- Step 4: AI Summary -->
+          <div class="arch-node" data-type="ai">
+            <div class="node-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+              </svg>
+            </div>
+            <div class="node-label">AI Summary</div>
+            <div class="node-tech">Generated</div>
+          </div>
+          <div class="arch-arrow">
+            <svg width="40" height="20" viewBox="0 0 40 20">
+              <line x1="0" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3"/>
+              <polygon points="30,5 40,10 30,15" fill="currentColor"/>
+            </svg>
+          </div>
+
+          <!-- Step 5: Care Team Notified -->
+          <div class="arch-node" data-type="notification">
+            <div class="node-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 01-3.46 0"/>
+              </svg>
+            </div>
+            <div class="node-label">Care Team</div>
+            <div class="node-tech">Notified</div>
+          </div>
         </div>
       </section>
 
@@ -123,40 +184,121 @@
           </h2>
 
           <div class="simulator-controls">
-            <div class="form-group">
+            <div class="form-group" style="flex: 1;">
               <label>Select Patient</label>
               <select [(ngModel)]="selectedPatientId">
-                <option value="">All Patients</option>
+                <option value="" disabled selected>Select a patient...</option>
                 <option *ngFor="let patient of patients" [value]="patient.id">
                   {{ patient.name }} ({{ patient.phone_number }})
                 </option>
               </select>
             </div>
-            <button class="btn-run-trace" (click)="searchPatientLogs()" [disabled]="loadingFilteredLogs">
+            <button class="btn-icon" (click)="openFilterModal()" title="Advanced Filters" style="background-color: #6c757d; position: relative;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+              </svg>
+              <span *ngIf="getActiveFiltersCount() > 0" class="filter-badge">{{ getActiveFiltersCount() }}</span>
+            </button>
+            <button class="btn-icon" (click)="exportToCSV()" [disabled]="filteredLogs.length === 0" title="Export to CSV" [style.background-color]="filteredLogs.length > 0 ? '#27AE60' : '#95a5a6'">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="search-button-row">
+            <button class="btn-run-trace" (click)="searchPatientLogs()" [disabled]="loadingFilteredLogs || (!selectedPatientId && !fromDate && !toDate && selectedActions.length === 0)">
               <svg *ngIf="!loadingFilteredLogs" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/>
                 <path d="m21 21-4.35-4.35"/>
               </svg>
               <span class="spinner-small" *ngIf="loadingFilteredLogs"></span>
-              {{ loadingFilteredLogs ? 'Searching...' : 'Search Patient' }}
+              {{ loadingFilteredLogs ? 'Searching...' : 'Search Logs' }}
             </button>
           </div>
 
+          <!-- Filter Modal -->
+          <div class="filter-modal-overlay" *ngIf="showFilterModal" (click)="closeFilterModal()">
+            <div class="filter-modal" (click)="$event.stopPropagation()">
+              <div class="modal-header">
+                <h3>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                  </svg>
+                  Advanced Filters
+                </h3>
+                <button class="close-btn" (click)="closeFilterModal()">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+              
+              <div class="modal-body">
+                <div class="filter-section">
+                  <label class="filter-label">Date Range</label>
+                  <div class="date-inputs">
+                    <div class="form-group">
+                      <label>From Date</label>
+                      <input type="date" [(ngModel)]="fromDate">
+                    </div>
+                    <div class="form-group">
+                      <label>To Date</label>
+                      <input type="date" [(ngModel)]="toDate">
+                    </div>
+                  </div>
+                </div>
+
+                <div class="filter-section" [class.dropdown-open]="showActionsDropdown">
+                  <label class="filter-label">Action Types</label>
+                  <div class="custom-multiselect">
+                    <div class="multiselect-header" (click)="toggleActionsDropdown()">
+                      <span class="selected-text">
+                        {{ selectedActions.length > 0 ? selectedActions.length + ' action(s) selected' : 'Select action types...' }}
+                      </span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.rotated]="showActionsDropdown">
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </div>
+                    <div class="multiselect-dropdown" *ngIf="showActionsDropdown">
+                      <label class="dropdown-item" *ngFor="let action of availableActions">
+                        <input type="checkbox" 
+                               [checked]="isActionSelected(action)" 
+                               (change)="toggleAction(action)">
+                        <span>{{ action }}</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="modal-footer">
+                <button class="btn-secondary" (click)="clearModalFilters()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                  Clear Filters
+                </button>
+                <button class="btn-primary" (click)="applyFilters()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Filtered Logs -->
-          <div class="trace-log" *ngIf="!loadingFilteredLogs && filteredLogs.length > 0">
-            <div class="trace-entry" *ngFor="let log of filteredLogs">
-              <div class="trace-body">
-                <div class="trace-header">
-                  <span class="trace-layer" [attr.data-action]="getActionType(log.action)">{{ log.action }}</span>
-                  <span class="trace-status">{{ formatLogTime(log.timestamp) }}</span>
-                </div>
-                <div class="trace-action">{{ log.patient_name || 'Unknown Patient' }}</div>
-                <div class="trace-detail" *ngIf="log.timestamp">
-                  <strong>Time:</strong> {{ log.timestamp }}
-                </div>
-                <div class="trace-data" *ngIf="log.metadata && hasMetadata(log.metadata)">
-                  <code>{{ formatJSON(log.metadata) }}</code>
-                </div>
+          <div class="layer-list" *ngIf="!loadingFilteredLogs && filteredLogs.length > 0" style="max-height: 400px; overflow-y: auto;">
+            <div class="layer-item" *ngFor="let log of filteredLogs">
+              <div class="layer-badge" [attr.data-action]="getActionType(log.action)" style="background-color: var(--badge-bg, #4A90E2); color: white; padding: 4px 8px; border-radius: 4px;">{{ log.action }}</div>
+              <div class="layer-info">
+                <div class="layer-name">{{ log.patient_name || 'Unknown Patient' }}</div>
+                <div class="layer-desc" *ngIf="log.timestamp">{{ formatLogTime(log.timestamp) }}</div>
               </div>
             </div>
           </div>
@@ -172,7 +314,7 @@
               <line x1="12" y1="8" x2="12" y2="12"/>
               <line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            <p>{{ selectedPatientId ? 'No logs found for this patient' : 'Select a patient to view logs' }}</p>
+            <p>{{ (selectedPatientId || fromDate || toDate || selectedActions.length > 0) ? 'No logs found for the selected filters' : 'Select a patient or use Advanced Filters, then click Search to view logs' }}</p>
           </div>
         </section>
 
@@ -240,7 +382,7 @@
           </div> -->
 
           <!-- Action Logs -->
-          <div class="action-logs-card">
+          <!-- <div class="action-logs-card">
             <h3>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -250,28 +392,13 @@
                 <polyline points="10 9 9 9 8 9"/>
               </svg>
               Patient Action Logs
-              <button class="refresh-btn" (click)="loadActionLogs()" [disabled]="loadingLogs">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="23 4 23 10 17 10"/>
-                  <polyline points="1 20 1 14 7 14"/>
-                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                </svg>
-              </button>
             </h3>
-            <div class="action-logs-list" *ngIf="!loadingLogs && actionLogs.length > 0">
-              <div class="trace-entry" *ngFor="let log of actionLogs">
-                <div class="trace-body">
-                  <div class="trace-header">
-                    <span class="trace-layer" [attr.data-action]="getActionType(log.action)">{{ log.action }}</span>
-                    <span class="trace-status">{{ formatLogTime(log.timestamp) }}</span>
-                  </div>
-                  <div class="trace-action">{{ log.patient_name || 'Unknown Patient' }}</div>
-                  <div class="trace-detail" *ngIf="log.timestamp">
-                    <strong>Time:</strong> {{ log.timestamp }}
-                  </div>
-                  <div class="trace-data" *ngIf="log.metadata && hasMetadata(log.metadata)">
-                    <code>{{ formatJSON(log.metadata) }}</code>
-                  </div>
+            <div class="layer-list" *ngIf="!loadingLogs && actionLogs.length > 0" style="max-height: 400px; overflow-y: auto;">
+              <div class="layer-item" *ngFor="let log of actionLogs">
+                <div class="layer-badge" [attr.data-action]="getActionType(log.action)" style="background-color: var(--badge-bg, #4A90E2); color: white; padding: 4px 8px; border-radius: 4px;">{{ log.action }}</div>
+                <div class="layer-info">
+                  <div class="layer-name">{{ log.patient_name || 'Unknown Patient' }}</div>
+                  <div class="layer-desc" *ngIf="log.timestamp">{{ formatLogTime(log.timestamp) }}</div>
                 </div>
               </div>
             </div>
@@ -287,7 +414,7 @@
               </svg>
               <p>No action logs found</p>
             </div>
-          </div>
+          </div> -->
 
           <!-- Architecture Layers Description -->
           <!-- <div class="layers-card">
@@ -304,7 +431,6 @@
                 <div class="layer-badge" [attr.data-type]="layer.type">{{ layer.type | uppercase }}</div>
                 <div class="layer-info">
                   <div class="layer-name">{{ layer.name }}</div>
-                  <div class="layer-desc">{{ layer.description }}</div>
                 </div>
               </div>
             </div>

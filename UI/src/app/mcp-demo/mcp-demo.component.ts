@@ -48,9 +48,29 @@ export class McpDemoComponent implements OnInit, OnDestroy {
   // Patient search and filter
   patients: any[] = [];
   loadingPatients = false;
-  selectedPatientId: string = '';
+  selectedPatientId: string | undefined = undefined;
   filteredLogs: any[] = [];
   loadingFilteredLogs = false;
+  fromDate: string | undefined = undefined;
+  toDate: string | undefined = undefined;
+  
+  // Filter modal
+  showFilterModal = false;
+  showActionsDropdown = false;
+  availableActions: string[] = [
+    'SMS Sent',
+    'Form Link Sent',
+    'Form Submitted',
+    'Conversation Started',
+    'Conversation Completed',
+    'AI Summary Generated',
+    'Patient Created',
+    'Patient Updated',
+    'Care Team Assigned',
+    'Follow-up Scheduled',
+    'Notification Sent'
+  ];
+  selectedActions: string[] = [];
 
   constructor(
     private mcpService: McpService,
@@ -64,7 +84,7 @@ export class McpDemoComponent implements OnInit, OnDestroy {
     this.loadTools();
     this.loadActionLogs();
     this.loadPatients();
-    this.searchPatientLogs(); // Load all patient logs on initial load
+    // Don't load patient logs on initial load - wait for user to select a patient
     
     // Auto-refresh logs every 10 seconds
     this.logsRefreshInterval = setInterval(() => {
@@ -211,7 +231,9 @@ export class McpDemoComponent implements OnInit, OnDestroy {
     this.loadingLogs = true;
     this.mcpService.getActionLogs(30).subscribe({
       next: (res: any) => {
-        this.actionLogs = res.logs || [];
+        let logs = res.logs || [];
+        // Sort by date and time (newest first)
+        this.actionLogs = this.sortLogsByDate(logs);
         this.loadingLogs = false;
         this.cdr.detectChanges();
       },
@@ -227,19 +249,15 @@ export class McpDemoComponent implements OnInit, OnDestroy {
   formatLogTime(timestamp: string): string {
     if (!timestamp) return '';
     const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (seconds < 60) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
     
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
   }
 
   getActionType(action: string): string {
@@ -290,28 +308,29 @@ export class McpDemoComponent implements OnInit, OnDestroy {
   }
 
   searchPatientLogs(): void {
+    console.log('searchPatientLogs called with selectedPatientId:', this.selectedPatientId);
+    console.log('Date range:', this.fromDate, 'to', this.toDate);
+    console.log('Selected actions:', this.selectedActions);
+    
+    // Check if at least one filter is provided
+    const hasPatientFilter = this.selectedPatientId && this.selectedPatientId !== '';
+    const hasDateFilter = this.fromDate || this.toDate;
+    const hasActionFilter = this.selectedActions.length > 0;
+    
+    if (!hasPatientFilter && !hasDateFilter && !hasActionFilter) {
+      console.log('No filters selected, clearing results');
+      this.filteredLogs = [];
+      this.loadingFilteredLogs = false;
+      this.cdr.detectChanges();
+      return;
+    }
+    
     this.loadingFilteredLogs = true;
     
-    if (!this.selectedPatientId || this.selectedPatientId === '') {
-      // Show all logs when "All Patients" is selected
-      this.mcpService.getActionLogs(30).subscribe({
-        next: (res: any) => {
-          this.filteredLogs = res.logs || [];
-          this.loadingFilteredLogs = false;
-          this.cdr.detectChanges();
-        },
-        error: (err: any) => {
-          console.error('Error loading all logs:', err);
-          this.filteredLogs = [];
-          this.loadingFilteredLogs = false;
-          this.cdr.detectChanges();
-        }
-      });
-    } else {
-      // Fetch logs for specific patient using path parameter: /api/action-logs/{patientId}
-      const patientId = parseInt(this.selectedPatientId.toString());
-      
-      console.log('Selected Patient ID:', this.selectedPatientId, 'Parsed:', patientId);
+    let patientId: number | undefined = undefined;
+    
+    if (hasPatientFilter) {
+      patientId = parseInt(this.selectedPatientId!.toString());
       
       if (isNaN(patientId)) {
         console.error('Invalid patient ID:', this.selectedPatientId);
@@ -320,20 +339,184 @@ export class McpDemoComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
         return;
       }
-      
-      this.mcpService.getPatientActionLogs(patientId).subscribe({
-        next: (response) => {
-          this.filteredLogs = response.logs || [];
-          this.loadingFilteredLogs = false;
-          this.cdr.detectChanges();
-        },
-        error: (err) => {
-          console.error('Error loading patient logs:', err);
-          this.filteredLogs = [];
-          this.loadingFilteredLogs = false;
-          this.cdr.detectChanges();
-        }
-      });
     }
+    
+    console.log('Fetching logs with filters - Patient ID:', patientId, 'Date range:', hasDateFilter, 'Actions:', hasActionFilter);
+    
+    // Use query parameter API: /api/action-logs?limit=100&patient_id={id} (if patient selected)
+    // If no patient selected, fetch all logs and filter by date/action
+    this.mcpService.getActionLogs(100, patientId).subscribe({
+      next: (res: any) => {
+        console.log('Received logs response:', res);
+        let logs = res.logs || [];
+        
+        // Apply date filtering on the client side
+        if (hasDateFilter) {
+          logs = this.filterLogsByDateRange(logs);
+          console.log('After date filtering:', logs.length, 'logs');
+        }
+        
+        // Apply action filtering on the client side
+        if (hasActionFilter) {
+          logs = this.filterLogsByActions(logs);
+          console.log('After action filtering:', logs.length, 'logs');
+        }
+        
+        // Sort by date and time (newest first)
+        logs = this.sortLogsByDate(logs);
+        console.log('Sorted logs by date (newest first)');
+        
+        this.filteredLogs = logs;
+        console.log('Filtered logs count:', this.filteredLogs.length);
+        this.loadingFilteredLogs = false;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        console.error('Error loading logs:', err);
+        this.filteredLogs = [];
+        this.loadingFilteredLogs = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  filterLogsByDateRange(logs: any[]): any[] {
+    return logs.filter(log => {
+      if (!log.timestamp) return false;
+      
+      const logDate = new Date(log.timestamp);
+      logDate.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+      
+      if (this.fromDate) {
+        const fromDateTime = new Date(this.fromDate);
+        fromDateTime.setHours(0, 0, 0, 0);
+        if (logDate < fromDateTime) return false;
+      }
+      
+      if (this.toDate) {
+        const toDateTime = new Date(this.toDate);
+        toDateTime.setHours(23, 59, 59, 999); // End of day
+        if (logDate > toDateTime) return false;
+      }
+      
+      return true;
+    });
+  }
+
+  filterLogsByActions(logs: any[]): any[] {
+    return logs.filter(log => this.selectedActions.includes(log.action));
+  }
+
+  sortLogsByDate(logs: any[]): any[] {
+    return logs.sort((a, b) => {
+      const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return dateB - dateA; // Descending order (newest first)
+    });
+  }
+
+  // Modal methods
+  openFilterModal(): void {
+    this.showFilterModal = true;
+  }
+
+  closeFilterModal(): void {
+    this.showFilterModal = false;
+  }
+
+  applyFilters(): void {
+    this.closeFilterModal();
+    this.searchPatientLogs();
+  }
+
+  clearModalFilters(): void {
+    this.fromDate = undefined;
+    this.toDate = undefined;
+    this.selectedActions = [];
+  }
+
+  clearFilters(): void {
+    this.fromDate = undefined;
+    this.toDate = undefined;
+    this.selectedPatientId = undefined;
+    this.selectedActions = [];
+    this.filteredLogs = [];
+    this.cdr.detectChanges();
+  }
+
+  toggleAction(action: string): void {
+    const index = this.selectedActions.indexOf(action);
+    if (index > -1) {
+      this.selectedActions.splice(index, 1);
+    } else {
+      this.selectedActions.push(action);
+    }
+  }
+
+  isActionSelected(action: string): boolean {
+    return this.selectedActions.includes(action);
+  }
+
+  getActiveFiltersCount(): number {
+    let count = 0;
+    if (this.fromDate) count++;
+    if (this.toDate) count++;
+    if (this.selectedActions.length > 0) count++;
+    return count;
+  }
+
+  toggleActionsDropdown(): void {
+    this.showActionsDropdown = !this.showActionsDropdown;
+  }
+
+  exportToCSV(): void {
+    if (this.filteredLogs.length === 0) {
+      return;
+    }
+
+    // Define CSV headers
+    const headers = ['Patient Name', 'Phone Number', 'Action', 'Timestamp', 'Metadata'];
+    
+    // Convert logs to CSV rows
+    const csvRows = this.filteredLogs.map(log => {
+      const metadata = log.metadata && typeof log.metadata === 'object' 
+        ? JSON.stringify(log.metadata).replace(/"/g, '""') // Escape quotes
+        : '';
+      
+      // Add tab prefix to phone number to force text format in Excel
+      const phoneNumber = log.phone_number ? `\t${log.phone_number}` : '';
+      
+      return [
+        log.patient_name || 'Unknown',
+        phoneNumber,
+        log.action || '',
+        log.timestamp || '',
+        metadata
+      ].map(field => `"${field}"`).join(',');
+    });
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...csvRows
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `patient_logs_${timestamp}.csv`;
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log(`Exported ${this.filteredLogs.length} logs to ${filename}`);
   }
 }

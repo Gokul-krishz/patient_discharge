@@ -19,7 +19,7 @@ export const routes: Routes = [
     loadComponent: () => import('./follow-ups/follow-ups.component').then(m => m.FollowUpsComponent)
   },
   {
-    path: 'mcp-demo',
+    path: 'patient-logs',
     loadComponent: () => import('./mcp-demo/mcp-demo.component').then(m => m.McpDemoComponent)
   },
   {

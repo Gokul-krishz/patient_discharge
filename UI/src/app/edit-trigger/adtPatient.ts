@@ -229,7 +229,7 @@ export class AdtPatientComponent implements OnInit {
   }
 
   navigateToMcpDemo(): void {
-    this.router.navigate(['/mcp-demo']);
+    this.router.navigate(['/patient-logs']);
   }
 
   goToPage(page: number): void {
